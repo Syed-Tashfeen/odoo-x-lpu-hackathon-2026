@@ -19,6 +19,10 @@ const envSchema = z.object({
 
   // CORS
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
+
+  // Email (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default("StockSense <onboarding@resend.dev>"),
 });
 
 const parsed = envSchema.safeParse(process.env);

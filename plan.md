@@ -332,19 +332,19 @@ export const stockMoves = pgTable("stock_moves", {
 
 ### Phase 1 — Foundation & Auth (Day 1)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Set up Supabase project, get connection string              | Create project at supabase.com, copy `DATABASE_URL` |
-| 2  | Configure Drizzle for Supabase                              | Update `drizzle.config.ts`, point to Supabase Postgres |
-| 3  | Create full schema files under `backend/src/db/schema/`     | enums, users, otp_codes, categories, warehouses, locations, products, operations, operation_lines, stock_levels, stock_moves |
-| 4  | Run `drizzle-kit push` to sync schema                       | |
-| 5  | Auth module — `POST /api/auth/signup`                       | Zod body validation, bcrypt hash, insert user, return JWT |
-| 6  | Auth module — `POST /api/auth/login`                        | Validate credentials, return JWT + user |
-| 7  | Auth module — `POST /api/auth/forgot-password`              | Generate 6-digit OTP, store in `otp_codes`, email/log it |
-| 8  | Auth module — `POST /api/auth/reset-password`               | Verify OTP, update `password_hash` |
-| 9  | Auth middleware — `verifyToken`                              | Decode JWT, attach `req.user` |
-| 10 | Auth middleware — `requireRole('manager')`                   | Role guard |
-| 11 | Seed script — default warehouse, locations, admin user      | |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Set up Supabase project, get connection string              | Create project at supabase.com, copy `DATABASE_URL` | Completed |
+| 2  | Configure Drizzle for Supabase                              | Update `drizzle.config.ts`, point to Supabase Postgres | Completed |
+| 3  | Create full schema files under `backend/src/db/schema/`     | enums, users, otp_codes, categories, warehouses, locations, products, operations, operation_lines, stock_levels, stock_moves | Completed |
+| 4  | Run `drizzle-kit push` to sync schema                       | Sync schema with Supabase Postgres | Completed |
+| 5  | Auth module — `POST /api/auth/signup`                       | Zod body validation, bcrypt hash, insert user, return JWT | Completed |
+| 6  | Auth module — `POST /api/auth/login`                        | Validate credentials, return JWT + user | Completed |
+| 7  | Auth module — `POST /api/auth/forgot-password`              | Generate 6-digit OTP, store in `otp_codes`, email/log it | Completed |
+| 8  | Auth module — `POST /api/auth/reset-password`               | Verify OTP, update `password_hash` | Completed |
+| 9  | Auth middleware — `verifyToken`                              | Decode JWT, attach `req.user` | Completed |
+| 10 | Auth middleware — `requireRole('manager')`                   | Role guard | Completed |
+| 11 | Seed script — default warehouse, locations, admin user      | `npm run db:seed` | Completed |
 
 ### Phase 2 — Products & Categories (Day 1–2)
 

@@ -1,37 +1,41 @@
-import { eq } from "drizzle-orm";
-import { randomBytes } from "crypto";
+import { eq, and, gt } from "drizzle-orm";
+import crypto from "crypto";
 import { db } from "../../config/db.js";
-import { users } from "../../db/schema/index.js";
+import { users, otpCodes } from "../../db/schema/index.js";
 import { hashPassword, comparePassword } from "../../lib/password.js";
-import { generateTokenPair, verifyRefreshToken } from "../../lib/jwt.js";
+import { generateTokenPair } from "../../lib/jwt.js";
+import { sendOtpEmail } from "../../lib/mailer.js";
 import { ApiError } from "../../lib/api-error.js";
-import type { SafeUser } from "../../db/schema/users.js";
+import type { SafeUser, User } from "../../db/schema/users.js";
 
 // ═══════════════════════════════════════════════════════════
-// AUTH SERVICE — Business logic layer
+// AUTH SERVICE — StockSense Authentication Business Logic
 // ═══════════════════════════════════════════════════════════
 
 /**
- * Strip sensitive fields from a user record.
+ * Strip sensitive fields (like passwordHash) from a user record.
  */
-function toSafeUser(user: typeof users.$inferSelect): SafeUser {
-  const { password, refreshToken, verificationToken, resetToken, resetTokenExpiry, ...safe } = user;
+export function toSafeUser(user: User): SafeUser {
+  const { passwordHash, ...safe } = user;
   return safe;
 }
 
 /**
- * Register a new user.
+ * Signup / Register a new user.
  */
-export async function register(data: {
+export async function signup(data: {
+  name: string;
   email: string;
   password: string;
-  name: string;
+  role?: "manager" | "staff";
 }) {
+  const normalizedEmail = data.email.toLowerCase().trim();
+
   // Check if email already taken
   const existing = await db
     .select()
     .from(users)
-    .where(eq(users.email, data.email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing.length > 0) {
@@ -41,208 +45,191 @@ export async function register(data: {
   // Hash password
   const hashedPassword = await hashPassword(data.password);
 
-  // Generate email verification token
-  const verificationToken = randomBytes(32).toString("hex");
-
-  // Create user
+  // Insert user into PostgreSQL
   const [user] = await db
     .insert(users)
     .values({
-      email: data.email,
-      password: hashedPassword,
-      name: data.name,
-      verificationToken,
+      name: data.name.trim(),
+      email: normalizedEmail,
+      passwordHash: hashedPassword,
+      role: data.role || "staff",
+      isActive: true,
     })
     .returning();
 
-  // Generate tokens
-  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  // Generate JWT access & refresh tokens
+  const tokenPayload = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name,
+  };
   const tokens = generateTokenPair(tokenPayload);
-
-  // Store refresh token
-  await db
-    .update(users)
-    .set({ refreshToken: tokens.refreshToken })
-    .where(eq(users.id, user.id));
-
-  // Log verification token (no email service in template)
-  console.log(`📧 Email verification token for ${user.email}: ${verificationToken}`);
 
   return {
     user: toSafeUser(user),
-    ...tokens,
+    token: tokens.accessToken,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
   };
 }
+
+// Keep register as alias for signup
+export const register = signup;
 
 /**
  * Login with email and password.
  */
 export async function login(data: { email: string; password: string }) {
+  const normalizedEmail = data.email.toLowerCase().trim();
+
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, data.email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (!user) {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
-  const isValidPassword = await comparePassword(data.password, user.password);
+  if (!user.isActive) {
+    throw ApiError.forbidden("Account is deactivated");
+  }
+
+  const isValidPassword = await comparePassword(data.password, user.passwordHash);
   if (!isValidPassword) {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
   // Generate tokens
-  const tokenPayload = { id: user.id, email: user.email, role: user.role };
+  const tokenPayload = {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    name: user.name,
+  };
   const tokens = generateTokenPair(tokenPayload);
-
-  // Store refresh token
-  await db
-    .update(users)
-    .set({ refreshToken: tokens.refreshToken })
-    .where(eq(users.id, user.id));
 
   return {
     user: toSafeUser(user),
-    ...tokens,
+    token: tokens.accessToken,
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
   };
 }
 
 /**
- * Logout — invalidate refresh token.
- */
-export async function logout(userId: string) {
-  await db
-    .update(users)
-    .set({ refreshToken: null })
-    .where(eq(users.id, userId));
-}
-
-/**
- * Refresh access token using a valid refresh token.
- * Implements token rotation (old refresh token is replaced).
- */
-export async function refresh(refreshTokenValue: string) {
-  // Verify the refresh token
-  let decoded;
-  try {
-    decoded = verifyRefreshToken(refreshTokenValue);
-  } catch {
-    throw ApiError.unauthorized("Invalid or expired refresh token");
-  }
-
-  // Find user and validate stored token matches
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, decoded.id))
-    .limit(1);
-
-  if (!user || user.refreshToken !== refreshTokenValue) {
-    throw ApiError.unauthorized("Invalid refresh token");
-  }
-
-  // Generate new token pair (rotation)
-  const tokenPayload = { id: user.id, email: user.email, role: user.role };
-  const tokens = generateTokenPair(tokenPayload);
-
-  // Store new refresh token
-  await db
-    .update(users)
-    .set({ refreshToken: tokens.refreshToken })
-    .where(eq(users.id, user.id));
-
-  return {
-    user: toSafeUser(user),
-    ...tokens,
-  };
-}
-
-/**
- * Forgot password — generate reset token.
- * Logs token to console (no email service in template).
+ * Forgot password — generate 6-digit OTP and store in otp_codes table.
  */
 export async function forgotPassword(email: string) {
+  const normalizedEmail = email.toLowerCase().trim();
+
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.email, email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
-  // Always return success to prevent email enumeration
+  // Always return generic success to prevent email enumeration attacks
   if (!user) {
-    return;
+    return {
+      message: "If an account with that email exists, an OTP has been sent.",
+    };
   }
 
-  const resetToken = randomBytes(32).toString("hex");
-  const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
+  // Invalidate any previously unused OTPs for this user
   await db
-    .update(users)
-    .set({ resetToken, resetTokenExpiry })
-    .where(eq(users.id, user.id));
+    .update(otpCodes)
+    .set({ used: true })
+    .where(and(eq(otpCodes.userId, user.id), eq(otpCodes.used, false)));
 
-  // Log token (swap with real email service during hackathon)
-  console.log(`🔑 Password reset token for ${email}: ${resetToken}`);
-  console.log(`   Expires at: ${resetTokenExpiry.toISOString()}`);
+  // Generate secure 6-digit OTP code
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
+
+  // Save to otp_codes table
+  await db.insert(otpCodes).values({
+    userId: user.id,
+    code: otp,
+    expiresAt,
+    used: false,
+  });
+
+  // Send real email via Resend
+  await sendOtpEmail(user.email, otp);
+
+  // Log OTP clearly to console for local/hackathon testing
+  console.log("\n╔══════════════════════════════════════════════════════════════════╗");
+  console.log(`║ 🔑 StockSense Password Reset OTP: [ ${otp} ]              ║`);
+  console.log(`║ 📧 Recipient: ${user.email.padEnd(51)}║`);
+  console.log(`║ ⏰ Valid until: ${expiresAt.toISOString().padEnd(49)}║`);
+  console.log("╚══════════════════════════════════════════════════════════════════╝\n");
+
+  return {
+    message: "If an account with that email exists, an OTP has been sent.",
+    // Note: In development mode, we can also return otp for convenience in automated tests
+    ...(process.env.NODE_ENV !== "production" ? { devOtp: otp } : {}),
+  };
 }
 
 /**
- * Reset password using a valid reset token.
+ * Reset password using 6-digit OTP.
  */
-export async function resetPassword(token: string, newPassword: string) {
+export async function resetPassword(data: {
+  email: string;
+  otp: string;
+  newPassword: string;
+}) {
+  const normalizedEmail = data.email.toLowerCase().trim();
+
   const [user] = await db
     .select()
     .from(users)
-    .where(eq(users.resetToken, token))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (!user) {
-    throw ApiError.badRequest("Invalid reset token");
+    throw ApiError.badRequest("Invalid email or OTP code");
   }
 
-  if (!user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-    throw ApiError.badRequest("Reset token has expired");
-  }
-
-  const hashedPassword = await hashPassword(newPassword);
-
-  await db
-    .update(users)
-    .set({
-      password: hashedPassword,
-      resetToken: null,
-      resetTokenExpiry: null,
-    })
-    .where(eq(users.id, user.id));
-}
-
-/**
- * Verify email using verification token.
- */
-export async function verifyEmail(token: string) {
-  const [user] = await db
+  // Find active, unused OTP that hasn't expired
+  const [validOtp] = await db
     .select()
-    .from(users)
-    .where(eq(users.verificationToken, token))
+    .from(otpCodes)
+    .where(
+      and(
+        eq(otpCodes.userId, user.id),
+        eq(otpCodes.code, data.otp),
+        eq(otpCodes.used, false),
+        gt(otpCodes.expiresAt, new Date())
+      )
+    )
     .limit(1);
 
-  if (!user) {
-    throw ApiError.badRequest("Invalid verification token");
+  if (!validOtp) {
+    throw ApiError.badRequest("Invalid or expired OTP code");
   }
 
-  if (user.emailVerified) {
-    throw ApiError.badRequest("Email already verified");
-  }
+  // Mark OTP as used
+  await db
+    .update(otpCodes)
+    .set({ used: true })
+    .where(eq(otpCodes.id, validOtp.id));
 
+  // Hash new password and update user record
+  const hashedPassword = await hashPassword(data.newPassword);
   await db
     .update(users)
     .set({
-      emailVerified: true,
-      verificationToken: null,
+      passwordHash: hashedPassword,
+      updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
+
+  return {
+    message: "Password reset successfully. You can now login with your new password.",
+  };
 }
 
 /**

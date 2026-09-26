@@ -67,3 +67,7 @@ export function authorize(...allowedRoles: string[]) {
     next();
   };
 }
+
+// Aliases matching hackathon specification
+export const verifyToken = authenticate;
+export const requireRole = authorize;

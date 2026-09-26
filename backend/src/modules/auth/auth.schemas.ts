@@ -9,24 +9,40 @@ extendZodWithOpenApi(z);
 // REQUEST SCHEMAS
 // ═══════════════════════════════════════════════════════════
 
-export const registerSchema = z
+export const signupSchema = z
   .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
-    password: z
-      .string()
-      .min(8, "Password must be at least 8 characters")
-      .openapi({ example: "securepassword123" }),
     name: z
       .string()
       .min(2, "Name must be at least 2 characters")
       .openapi({ example: "John Doe" }),
+    email: z
+      .string()
+      .email("Invalid email format")
+      .openapi({ example: "john@example.com" }),
+    password: z
+      .string()
+      .min(6, "Password must be at least 6 characters")
+      .openapi({ example: "securepassword123" }),
+    role: z
+      .enum(["manager", "staff"])
+      .optional()
+      .default("staff")
+      .openapi({ example: "staff" }),
   })
-  .openapi("RegisterRequest");
+  .openapi("SignupRequest");
+
+export const registerSchema = signupSchema;
 
 export const loginSchema = z
   .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
-    password: z.string().min(1, "Password is required").openapi({ example: "securepassword123" }),
+    email: z
+      .string()
+      .email("Invalid email format")
+      .openapi({ example: "john@example.com" }),
+    password: z
+      .string()
+      .min(1, "Password is required")
+      .openapi({ example: "securepassword123" }),
   })
   .openapi("LoginRequest");
 
@@ -38,25 +54,30 @@ export const refreshSchema = z
 
 export const forgotPasswordSchema = z
   .object({
-    email: z.string().email("Invalid email format").openapi({ example: "john@example.com" }),
+    email: z
+      .string()
+      .email("Invalid email format")
+      .openapi({ example: "john@example.com" }),
   })
   .openapi("ForgotPasswordRequest");
 
 export const resetPasswordSchema = z
   .object({
-    token: z.string().min(1, "Reset token is required"),
+    email: z
+      .string()
+      .email("Invalid email format")
+      .openapi({ example: "john@example.com" }),
+    otp: z
+      .string()
+      .length(6, "OTP must be exactly 6 digits")
+      .regex(/^\d{6}$/, "OTP must contain only numbers")
+      .openapi({ example: "123456" }),
     newPassword: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(6, "Password must be at least 6 characters")
       .openapi({ example: "newSecurePassword456" }),
   })
   .openapi("ResetPasswordRequest");
-
-export const verifyEmailSchema = z
-  .object({
-    token: z.string().min(1, "Verification token is required"),
-  })
-  .openapi("VerifyEmailRequest");
 
 // ═══════════════════════════════════════════════════════════
 // RESPONSE SCHEMAS
@@ -65,10 +86,10 @@ export const verifyEmailSchema = z
 export const safeUserResponseSchema = z
   .object({
     id: z.string().uuid(),
-    email: z.string().email(),
     name: z.string(),
-    role: z.enum(["user", "admin"]),
-    emailVerified: z.boolean(),
+    email: z.string().email(),
+    role: z.enum(["manager", "staff"]),
+    isActive: z.boolean(),
     createdAt: z.coerce.date(),
     updatedAt: z.coerce.date(),
   })
@@ -80,8 +101,9 @@ export const authResponseSchema = z
     message: z.string(),
     data: z.object({
       user: safeUserResponseSchema,
-      accessToken: z.string(),
-      refreshToken: z.string(),
+      token: z.string(),
+      accessToken: z.string().optional(),
+      refreshToken: z.string().optional(),
     }),
   })
   .openapi("AuthResponse");
@@ -99,12 +121,12 @@ export const messageResponseSchema = z
 
 registry.registerPath({
   method: "post",
-  path: "/auth/register",
+  path: "/auth/signup",
   tags: ["Auth"],
-  summary: "Register a new user",
-  request: { body: { content: { "application/json": { schema: registerSchema } } } },
+  summary: "Register/Signup a new user",
+  request: { body: { content: { "application/json": { schema: signupSchema } } } },
   responses: {
-    201: { description: "User registered", content: { "application/json": { schema: authResponseSchema } } },
+    201: { description: "User registered successfully", content: { "application/json": { schema: authResponseSchema } } },
     409: { description: "Email already exists" },
   },
 });
@@ -123,35 +145,12 @@ registry.registerPath({
 
 registry.registerPath({
   method: "post",
-  path: "/auth/refresh",
-  tags: ["Auth"],
-  summary: "Refresh access token",
-  request: { body: { content: { "application/json": { schema: refreshSchema } } } },
-  responses: {
-    200: { description: "Tokens refreshed", content: { "application/json": { schema: authResponseSchema } } },
-    401: { description: "Invalid refresh token" },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/logout",
-  tags: ["Auth"],
-  summary: "Logout (invalidate refresh token)",
-  security: [{ BearerAuth: [] }],
-  responses: {
-    200: { description: "Logged out", content: { "application/json": { schema: messageResponseSchema } } },
-  },
-});
-
-registry.registerPath({
-  method: "post",
   path: "/auth/forgot-password",
   tags: ["Auth"],
-  summary: "Request password reset",
+  summary: "Request 6-digit OTP for password reset",
   request: { body: { content: { "application/json": { schema: forgotPasswordSchema } } } },
   responses: {
-    200: { description: "Reset token generated", content: { "application/json": { schema: messageResponseSchema } } },
+    200: { description: "OTP sent / logged successfully", content: { "application/json": { schema: messageResponseSchema } } },
   },
 });
 
@@ -159,23 +158,11 @@ registry.registerPath({
   method: "post",
   path: "/auth/reset-password",
   tags: ["Auth"],
-  summary: "Reset password with token",
+  summary: "Reset password using 6-digit OTP",
   request: { body: { content: { "application/json": { schema: resetPasswordSchema } } } },
   responses: {
-    200: { description: "Password reset", content: { "application/json": { schema: messageResponseSchema } } },
-    400: { description: "Invalid or expired token" },
-  },
-});
-
-registry.registerPath({
-  method: "post",
-  path: "/auth/verify-email",
-  tags: ["Auth"],
-  summary: "Verify email with token",
-  request: { body: { content: { "application/json": { schema: verifyEmailSchema } } } },
-  responses: {
-    200: { description: "Email verified", content: { "application/json": { schema: messageResponseSchema } } },
-    400: { description: "Invalid token" },
+    200: { description: "Password reset successfully", content: { "application/json": { schema: messageResponseSchema } } },
+    400: { description: "Invalid or expired OTP" },
   },
 });
 
@@ -183,11 +170,11 @@ registry.registerPath({
   method: "get",
   path: "/auth/me",
   tags: ["Auth"],
-  summary: "Get current authenticated user",
+  summary: "Get current authenticated user profile",
   security: [{ BearerAuth: [] }],
   responses: {
     200: {
-      description: "Current user",
+      description: "Current user profile",
       content: {
         "application/json": {
           schema: z.object({
