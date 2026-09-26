@@ -47,7 +47,6 @@ Template_Hack/
 │       ├── middleware/       # auth, error-handler, validate
 │       ├── lib/              # helpers (paginate, logger)
 │       └── index.ts          # server entry
-├── db/                       # shared Drizzle config (already exists)
 ├── frontend/
 │   └── src/
 │       ├── components/       # reusable UI (Sidebar, DataTable, KPICard…)
