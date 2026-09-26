@@ -386,12 +386,12 @@ This is the **core** of the system. A single unified operations module handles r
 
 ### Phase 5 — Stock Ledger & Alerts (Day 3)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Move history endpoint                                       | `GET /api/stock/moves?product=&location=&from=&to=` |
-| 2  | Stock levels endpoint                                       | `GET /api/stock/levels?warehouse=&product=&below_reorder=true` |
-| 3  | Low-stock alerts                                            | `GET /api/stock/alerts` — products where `quantity <= reorder_point` |
-| 4  | Dashboard KPIs endpoint                                     | `GET /api/dashboard/kpis` — aggregated counts |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Move history endpoint                                       | `GET /api/stock/moves?product=&location=&from=&to=` | Completed |
+| 2  | Stock levels endpoint                                       | `GET /api/stock/levels?warehouse=&product=&below_reorder=true` | Completed |
+| 3  | Low-stock alerts                                            | `GET /api/stock/alerts` — products where `quantity <= reorder_point` | Completed |
+| 4  | Dashboard KPIs endpoint                                     | `GET /api/dashboard/kpis` — aggregated counts | Completed |
 
 ### Phase 6 — Profile & Settings (Day 3)
 

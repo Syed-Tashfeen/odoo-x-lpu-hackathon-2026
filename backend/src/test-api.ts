@@ -757,8 +757,180 @@ async function runTests() {
     }
     console.log("  ✅ Operation status transitioned to 'cancelled'");
 
+    // ══════════════════════════════════════════════════════════
+    // PHASE 5 — STOCK LEDGER & ALERTS TESTS
+    // ══════════════════════════════════════════════════════════
+
+    console.log("\n==================================================");
+    console.log("📊 PHASE 5 TESTS: STOCK LEDGER, ALERTS & KPIS");
+    console.log("==================================================");
+
+    // ── Test 38: Move History Endpoint (Task 1) ───────────────
+    console.log("\n▶ Test 38: GET /api/stock/moves (Retrieve immutable move audit history)");
+    const movesRes = await request({
+      method: "GET",
+      path: "/api/stock/moves",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${movesRes.status}`);
+    if (movesRes.status !== 200 || !Array.isArray(movesRes.body?.data)) {
+      throw new Error(`Get stock moves failed: ${JSON.stringify(movesRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved ${movesRes.body.data.length} stock move ledger entries (Total: ${movesRes.body.pagination.total})`);
+    
+    // Verify rich join fields
+    const firstMove = movesRes.body.data[0];
+    if (firstMove) {
+      console.log(`     Sample move: [${firstMove.moveType.toUpperCase()}] Qty: ${firstMove.quantity} for "${firstMove.product?.name}"`);
+      if (!firstMove.product?.sku || !firstMove.createdBy?.email) {
+        throw new Error("Missing joined product SKU or createdBy email in move history");
+      }
+    }
+
+    // ── Test 39: Filter Move History by moveType (Task 1) ──────
+    console.log("\n▶ Test 39: GET /api/stock/moves?moveType=in (Filter by moveType 'in')");
+    const inMovesRes = await request({
+      method: "GET",
+      path: "/api/stock/moves?moveType=in",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${inMovesRes.status}`);
+    if (inMovesRes.status !== 200 || !inMovesRes.body.data.every((m: any) => m.moveType === "in")) {
+      throw new Error(`Filter by moveType failed: ${JSON.stringify(inMovesRes.body)}`);
+    }
+    console.log(`  ✅ Found ${inMovesRes.body.data.length} inbound stock moves. All moveType === 'in'`);
+
+    // ── Test 40: Filter Move History by Product (Task 1) ──────
+    console.log(`\n▶ Test 40: GET /api/stock/moves?productId=${macbookPro.id} (Filter by Product ID)`);
+    const prodMovesRes = await request({
+      method: "GET",
+      path: `/api/stock/moves?productId=${macbookPro.id}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${prodMovesRes.status}`);
+    if (prodMovesRes.status !== 200 || !prodMovesRes.body.data.every((m: any) => m.product.id === macbookPro.id)) {
+      throw new Error(`Filter by product failed: ${JSON.stringify(prodMovesRes.body)}`);
+    }
+    console.log(`  ✅ Found ${prodMovesRes.body.data.length} moves specifically for MacBook Pro 16`);
+
+    // ── Test 41: Stock Levels Endpoint (Task 2) ───────────────
+    console.log("\n▶ Test 41: GET /api/stock/levels (List stock levels per location)");
+    const levelsRes = await request({
+      method: "GET",
+      path: "/api/stock/levels",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${levelsRes.status}`);
+    if (levelsRes.status !== 200 || !Array.isArray(levelsRes.body?.data)) {
+      throw new Error(`Get stock levels failed: ${JSON.stringify(levelsRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved ${levelsRes.body.data.length} stock level entries across locations`);
+    const sampleLevel = levelsRes.body.data[0];
+    if (sampleLevel) {
+      console.log(`     Sample: "${sampleLevel.product?.name}" at "${sampleLevel.location?.name}": ${sampleLevel.quantity} units (Below reorder: ${sampleLevel.isBelowReorder})`);
+    }
+
+    // ── Test 42: Stock Levels Filtered by Warehouse (Task 2) ──
+    console.log(`\n▶ Test 42: GET /api/stock/levels?warehouseId=${mainWh.id} (Filter by Warehouse)`);
+    const whLevelsRes = await request({
+      method: "GET",
+      path: `/api/stock/levels?warehouseId=${mainWh.id}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${whLevelsRes.status}`);
+    if (whLevelsRes.status !== 200 || !whLevelsRes.body.data.every((l: any) => l.location.warehouse.id === mainWh.id)) {
+      throw new Error(`Filter stock levels by warehouse failed: ${JSON.stringify(whLevelsRes.body)}`);
+    }
+    console.log(`  ✅ All ${whLevelsRes.body.data.length} stock levels belong to warehouse "${mainWh.name}"`);
+
+    // ── Test 43: Stock Levels Filtered by below_reorder (Task 2) ──
+    console.log("\n▶ Test 43: GET /api/stock/levels?below_reorder=true (Filter by below_reorder)");
+    const belowReorderRes = await request({
+      method: "GET",
+      path: "/api/stock/levels?below_reorder=true",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${belowReorderRes.status}`);
+    if (belowReorderRes.status !== 200 || !belowReorderRes.body.data.every((l: any) => l.isBelowReorder === true)) {
+      throw new Error(`Filter below_reorder failed: ${JSON.stringify(belowReorderRes.body)}`);
+    }
+    console.log(`  ✅ Found ${belowReorderRes.body.data.length} location stock entries below reorder point`);
+
+    // ── Test 44: Low-Stock Alerts (Task 3) ────────────────────
+    console.log("\n▶ Test 44: GET /api/stock/alerts (Retrieve low-stock alerts)");
+    const alertsRes = await request({
+      method: "GET",
+      path: "/api/stock/alerts",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${alertsRes.status}`);
+    if (alertsRes.status !== 200 || !Array.isArray(alertsRes.body?.data)) {
+      throw new Error(`Get stock alerts failed: ${JSON.stringify(alertsRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved ${alertsRes.body.data.length} low-stock alerts`);
+    console.log(`     Summary: ${alertsRes.body.summary.totalAlerts} total alerts, ${alertsRes.body.summary.criticalAlerts} critical (0 stock)`);
+    if (alertsRes.body.data.length > 0) {
+      const topAlert = alertsRes.body.data[0];
+      console.log(`     Top Alert: "${topAlert.productName}" (SKU: ${topAlert.sku})`);
+      console.log(`     Current Stock: ${topAlert.currentStock}, Reorder Point: ${topAlert.reorderPoint}, Deficit: ${topAlert.deficit}, Recommended Order: ${topAlert.recommendedOrder}`);
+    }
+
+    // ── Test 45: Dashboard KPIs Endpoint (Task 4) ─────────────
+    console.log("\n▶ Test 45: GET /api/dashboard/kpis (Retrieve dashboard KPI metrics)");
+    const kpisRes = await request({
+      method: "GET",
+      path: "/api/dashboard/kpis",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${kpisRes.status}`);
+    if (kpisRes.status !== 200 || !kpisRes.body?.data?.kpis) {
+      throw new Error(`Get dashboard KPIs failed: ${JSON.stringify(kpisRes.body)}`);
+    }
+    const kpis = kpisRes.body.data.kpis;
+    console.log("  ✅ Dashboard KPIs retrieved successfully:");
+    console.log(`     • Total Products: ${kpis.totalProducts}`);
+    console.log(`     • Total Stock On Hand: ${kpis.totalStockQuantity} units`);
+    console.log(`     • Low Stock Products: ${kpis.lowStockCount}`);
+    console.log(`     • Pending Receipts: ${kpis.pendingReceipts}`);
+    console.log(`     • Pending Deliveries: ${kpis.pendingDeliveries}`);
+    console.log(`     • Scheduled Transfers: ${kpis.scheduledTransfers}`);
+    console.log(`     • Completed Operations: ${kpis.completedOperations}`);
+    console.log(`     • Warehouses: ${kpis.totalWarehouses}`);
+    console.log(`     • Recent Operations Count: ${kpisRes.body.data.recentOperations.length}`);
+    console.log(`     • Quick Alerts Count: ${kpisRes.body.data.quickAlerts.length}`);
+
+    if (
+      typeof kpis.totalProducts !== "number" ||
+      typeof kpis.totalStockQuantity !== "number" ||
+      !Array.isArray(kpisRes.body.data.recentOperations)
+    ) {
+      throw new Error("Invalid KPI response structure");
+    }
+
+    // ── Test 46: Dashboard KPIs with Warehouse Filter (Task 4) ──
+    console.log(`\n▶ Test 46: GET /api/dashboard/kpis?warehouseId=${mainWh.id} (Warehouse-scoped KPIs)`);
+    const whKpisRes = await request({
+      method: "GET",
+      path: `/api/dashboard/kpis?warehouseId=${mainWh.id}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${whKpisRes.status}`);
+    if (whKpisRes.status !== 200 || !whKpisRes.body?.data?.kpis) {
+      throw new Error(`Get scoped KPIs failed: ${JSON.stringify(whKpisRes.body)}`);
+    }
+    console.log(`  ✅ Warehouse-scoped KPIs retrieved: ${whKpisRes.body.data.kpis.totalStockQuantity} units on hand in "${mainWh.name}"`);
+
     console.log("\n══════════════════════════════════════════════════════════════");
-    console.log("🎉 ALL PHASE 1, 2, 3, AND 4 TESTS PASSED WITH 100% SUCCESS!");
+    console.log("🎉 ALL PHASE 1, 2, 3, 4, AND 5 TESTS PASSED WITH 100% SUCCESS!");
     console.log("══════════════════════════════════════════════════════════════\n");
   } catch (err) {
     console.error("\n❌ Test execution error:", err);
