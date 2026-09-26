@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   authService,
   registerZodSchema,
-  loginZodSchema,
   getUsersFromDb,
 } from '../lib/authService';
 

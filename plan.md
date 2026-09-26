@@ -407,32 +407,34 @@ This is the **core** of the system. A single unified operations module handles r
 
 ### Phase 1 — Shell, Auth & Routing (Day 1)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Global layout: Sidebar + TopBar + Content area              | Sidebar: nav links, profile menu, logout |
-| 2  | Auth pages: Login, Signup, Forgot Password, Reset Password  | Forms with Zod client-side validation |
-| 3  | Zustand `authStore` — token, user, login/logout actions     | Persist token in localStorage |
-| 4  | Axios interceptor — attach JWT, handle 401 redirect         | |
-| 5  | Protected route wrapper                                     | Redirect to /login if not authenticated |
-| 6  | React Router setup — all route definitions                  | |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Global layout: Sidebar + TopBar + Content area              | TopBar: navigation links, profile menu, logout | Completed |
+| 2  | Auth pages: Login, Signup, Forgot Password, Reset Password  | Forms with Zod client-side validation | Completed |
+| 3  | Zustand `authStore` — token, user, login/logout actions     | Persist token in localStorage | Completed |
+| 4  | Axios interceptor — attach JWT, handle 401 redirect         | Automatic header injection | Completed |
+| 5  | Protected route wrapper                                     | Redirect to /login if not authenticated | Completed |
+| 6  | React Router setup — all route definitions                  | Full routing structure with lazy loading | Completed |
 
 ### Phase 2 — Dashboard (Day 2)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | KPI cards: Total Products, Low Stock, Pending Receipts, Pending Deliveries, Scheduled Transfers | Fetch from `/api/dashboard/kpis` |
-| 2  | Dynamic filter bar: doc type, status, warehouse, category   | Updates query params, refetches |
-| 3  | Recent operations table (last 10)                           | Quick links to operation detail |
-| 4  | Low-stock alert banner / list                               | Fetch from `/api/stock/alerts` |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | KPI cards: Total Products, Low Stock, Pending Receipts, Pending Deliveries, Scheduled Transfers | 8 interactive KPI cards linked to views | Completed |
+| 2  | Dynamic filter bar: doc type, status, warehouse, category   | Real-time operations filter by type & status | Completed |
+| 3  | Recent operations table (last 10)                           | Direct click-through to operation detail view | Completed |
+| 4  | Low-stock alert banner & Replenishment Queue                | Real-time alert banner + Quick Reorder action | Completed |
+| 5  | Stock by Category interactive Donut Chart                   | Recharts category breakdown with tooltips | Completed |
 
 ### Phase 3 — Products (Day 2–3)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Product list page with search (SKU, name) and category filter | DataTable component, pagination |
-| 2  | Create/Edit product form (modal or page)                    | Zod-validated form |
-| 3  | Product detail page                                         | Shows stock per location, reorder rules |
-| 4  | Category management (sub-page or settings)                  | |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Product list page with search (SKU, name) and category filter | Filter by category, low-stock toggle, search | Completed |
+| 2  | View Switcher: List View & Kanban Cards                     | Odoo-style List and Kanban view toggle | Completed |
+| 3  | Create/Edit product form (modal or page)                    | Zod-validated form with multi-location stock | Completed |
+| 4  | Product detail modal                                        | Shows stock per location, reorder thresholds | Completed |
+| 5  | Category management modal                                   | Color-tagged categories with creation modal | Completed |
 
 ### Phase 4 — Operations (Day 3–4)
 
