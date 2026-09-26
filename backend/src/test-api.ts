@@ -381,8 +381,384 @@ async function runTests() {
     }
     console.log("  ✅ Test category deleted successfully");
 
+    // ══════════════════════════════════════════════════════════
+    // PHASE 3 — WAREHOUSES & LOCATIONS TESTS
+    // ══════════════════════════════════════════════════════════
+
+    console.log("\n==================================================");
+    console.log("🏢 PHASE 3 TESTS: WAREHOUSES & LOCATIONS");
+    console.log("==================================================");
+
+    // Test 21: GET /api/warehouses
+    console.log("\n▶ Test 21: GET /api/warehouses (List warehouses with locationCount & totalStock)");
+    const warehousesRes = await request({
+      method: "GET",
+      path: "/api/warehouses",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${warehousesRes.status}`);
+    if (warehousesRes.status !== 200 || !Array.isArray(warehousesRes.body?.data)) {
+      throw new Error(`List warehouses failed: ${JSON.stringify(warehousesRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved ${warehousesRes.body.data.length} warehouses`);
+    const mainWh = warehousesRes.body.data.find((w: any) => w.name === "Main Distribution Center");
+    if (!mainWh) throw new Error("Main Distribution Center not found in seeded warehouses");
+    console.log(`     Main Warehouse ID: ${mainWh.id}, Locations: ${mainWh.locationCount}, Total Stock: ${mainWh.totalStock}`);
+
+    // Test 22: POST /api/warehouses (Create new warehouse)
+    console.log("\n▶ Test 22: POST /api/warehouses (Create new secondary warehouse)");
+    const newWhName = `East Coast Hub ${Date.now()}`;
+    const createWhRes = await request({
+      method: "POST",
+      path: "/api/warehouses",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        name: newWhName,
+        address: "99 Harbor Way, Port Terminal 2",
+        isActive: true,
+      },
+    });
+
+    console.log(`  Status: ${createWhRes.status}`);
+    if (createWhRes.status !== 201 || !createWhRes.body?.data?.id) {
+      throw new Error(`Create warehouse failed: ${JSON.stringify(createWhRes.body)}`);
+    }
+    const createdWhId = createWhRes.body.data.id;
+    console.log(`  ✅ Created warehouse "${newWhName}" (${createdWhId})`);
+
+    // Test 23: PATCH /api/warehouses/:id
+    console.log("\n▶ Test 23: PATCH /api/warehouses/:id (Update warehouse)");
+    const updateWhRes = await request({
+      method: "PATCH",
+      path: `/api/warehouses/${createdWhId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: { address: "Updated Address: 101 Harbor Way" },
+    });
+
+    console.log(`  Status: ${updateWhRes.status}`);
+    if (updateWhRes.status !== 200 || updateWhRes.body.data.address !== "Updated Address: 101 Harbor Way") {
+      throw new Error(`Update warehouse failed: ${JSON.stringify(updateWhRes.body)}`);
+    }
+    console.log("  ✅ Warehouse address updated successfully");
+
+    // Test 24: POST /api/warehouses/:id/locations (Create location under warehouse)
+    console.log("\n▶ Test 24: POST /api/warehouses/:id/locations (Create location)");
+    const createLocRes = await request({
+      method: "POST",
+      path: `/api/warehouses/${createdWhId}/locations`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        name: "Cold Storage Bay",
+        type: "internal",
+      },
+    });
+
+    console.log(`  Status: ${createLocRes.status}`);
+    if (createLocRes.status !== 201 || !createLocRes.body?.data?.id) {
+      throw new Error(`Create location failed: ${JSON.stringify(createLocRes.body)}`);
+    }
+    const createdLocId = createLocRes.body.data.id;
+    console.log(`  ✅ Created location "Cold Storage Bay" (${createdLocId})`);
+
+    // Test 25: GET /api/warehouses/:id/locations
+    console.log("\n▶ Test 25: GET /api/warehouses/:id/locations (List locations in warehouse)");
+    const listLocsRes = await request({
+      method: "GET",
+      path: `/api/warehouses/${createdWhId}/locations`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${listLocsRes.status}`);
+    if (listLocsRes.status !== 200 || listLocsRes.body.data.length === 0) {
+      throw new Error(`List locations failed: ${JSON.stringify(listLocsRes.body)}`);
+    }
+    console.log(`  ✅ Listed ${listLocsRes.body.data.length} location(s) under new warehouse`);
+
+    // Test 26: PATCH /api/locations/:id
+    console.log("\n▶ Test 26: PATCH /api/locations/:id (Direct location update)");
+    const updateLocRes = await request({
+      method: "PATCH",
+      path: `/api/locations/${createdLocId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: { name: "Deep Freeze Zone" },
+    });
+
+    console.log(`  Status: ${updateLocRes.status}`);
+    if (updateLocRes.status !== 200 || updateLocRes.body.data.name !== "Deep Freeze Zone") {
+      throw new Error(`Update location failed: ${JSON.stringify(updateLocRes.body)}`);
+    }
+    console.log("  ✅ Location renamed to 'Deep Freeze Zone'");
+
+    // Test 27: GET /api/warehouses/:id/stock-overview (Task 3: Aggregated stock grouped by location)
+    console.log("\n▶ Test 27: GET /api/warehouses/:id/stock-overview (Task 3: Stock overview grouped by location)");
+    const overviewRes = await request({
+      method: "GET",
+      path: `/api/warehouses/${mainWh.id}/stock-overview`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${overviewRes.status}`);
+    if (overviewRes.status !== 200 || !overviewRes.body?.data?.locations) {
+      throw new Error(`Stock overview failed: ${JSON.stringify(overviewRes.body)}`);
+    }
+    const overview = overviewRes.body.data;
+    console.log(`  ✅ Stock Overview for "${overview.warehouse.name}":`);
+    console.log(`     Total Stock Quantity: ${overview.summary.totalStockQuantity}`);
+    console.log(`     Unique Products: ${overview.summary.uniqueProductsCount}`);
+    console.log(`     Locations Count: ${overview.summary.totalLocationsCount}`);
+    for (const l of overview.locations) {
+      console.log(`     - [${l.type.toUpperCase()}] ${l.name}: ${l.totalQuantity} items (${l.itemCount} products)`);
+    }
+
+    // Test 28: Cleanup test location & warehouse
+    console.log("\n▶ Test 28: Cleanup test location & warehouse (DELETE)");
+    const delLocRes = await request({
+      method: "DELETE",
+      path: `/api/locations/${createdLocId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+    if (delLocRes.status !== 200) throw new Error("Delete location failed");
+
+    console.log("  ✅ Cleaned up temporary test location and warehouse");
+
+    // ══════════════════════════════════════════════════════════
+    // PHASE 4 — OPERATIONS ENGINE TESTS (MacBooks & iPhones)
+    // ══════════════════════════════════════════════════════════
+
+    console.log("\n==================================================");
+    console.log("⚡ PHASE 4 TESTS: OPERATIONS ENGINE (Apple Hardware)");
+    console.log("==================================================");
+
+    // Fetch Apple products from database for operation tests
+    const allAppleProdsRes = await request({
+      method: "GET",
+      path: "/api/products?search=MacBook",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    const macbookPro = allAppleProdsRes.body.data.find((p: any) => p.sku === "MBP-16-M3X");
+    if (!macbookPro) throw new Error("MacBook Pro 16 not found in seeded products");
+
+    // Fetch storage locations
+    const locationsRes = await request({
+      method: "GET",
+      path: `/api/warehouses/${mainWh.id}/locations`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    const rackALoc = locationsRes.body.data.find((l: any) => l.name.includes("Rack A"));
+    const rackBLoc = locationsRes.body.data.find((l: any) => l.name.includes("Rack B"));
+    if (!rackALoc || !rackBLoc) throw new Error("Warehouse Rack A or Rack B location not found");
+
+    // ── Test 29 & 30: Create Draft Receipt & Auto-Generated Reference ──
+    console.log("\n▶ Test 29: POST /api/operations (Create Draft Inbound Receipt for 20 MacBooks)");
+    const receiptCreateRes = await request({
+      method: "POST",
+      path: "/api/operations",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        type: "receipt",
+        destLocationId: rackALoc.id,
+        partnerName: "Apple Logistics Distribution",
+        notes: "Restock: 20x MacBook Pro 16 M3 Max",
+        lines: [{ productId: macbookPro.id, quantity: 20 }],
+      },
+    });
+
+    console.log(`  Status: ${receiptCreateRes.status}`);
+    if (receiptCreateRes.status !== 201 || !receiptCreateRes.body?.data?.id) {
+      throw new Error(`Create receipt failed: ${JSON.stringify(receiptCreateRes.body)}`);
+    }
+    const receiptOp = receiptCreateRes.body.data;
+    console.log(`  ✅ Created Receipt: ${receiptOp.reference} (Status: ${receiptOp.status})`);
+
+    // Verify auto-generated reference
+    if (!receiptOp.reference.startsWith("REC-")) {
+      throw new Error(`Expected reference to start with 'REC-', got: ${receiptOp.reference}`);
+    }
+    console.log(`  ✅ Auto-generated reference format verified: [ ${receiptOp.reference} ]`);
+
+    // ── Test 31: Update Draft Operation (Task 4) ─────────────
+    console.log("\n▶ Test 31: PATCH /api/operations/:id (Update draft operation notes & lines)");
+    const updateOpRes = await request({
+      method: "PATCH",
+      path: `/api/operations/${receiptOp.id}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        notes: "Updated Restock: 25x MacBook Pro 16 M3 Max",
+        lines: [{ productId: macbookPro.id, quantity: 25 }],
+      },
+    });
+
+    console.log(`  Status: ${updateOpRes.status}`);
+    if (updateOpRes.status !== 200 || updateOpRes.body.data.lines[0].quantity !== 25) {
+      throw new Error(`Update draft operation failed: ${JSON.stringify(updateOpRes.body)}`);
+    }
+    console.log("  ✅ Draft operation updated successfully (New planned quantity: 25)");
+
+    // Get previous stock level in Rack A before validation
+    const prodDetailBefore = await request({
+      method: "GET",
+      path: `/api/products/${macbookPro.id}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    const rackAStockBefore = prodDetailBefore.body.data.stockLevels.find((s: any) => s.locationId === rackALoc.id)?.quantity || 0;
+    console.log(`     MacBook Pro stock in Rack A BEFORE receipt: ${rackAStockBefore} units`);
+
+    // ── Test 32: Validate Receipt (Task 6) ───────────────────
+    console.log("\n▶ Test 32: POST /api/operations/:id/validate (Validate Receipt -> Mutates Stock)");
+    const validateReceiptRes = await request({
+      method: "POST",
+      path: `/api/operations/${receiptOp.id}/validate`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${validateReceiptRes.status}`);
+    if (validateReceiptRes.status !== 200 || validateReceiptRes.body.data.status !== "done") {
+      throw new Error(`Validate receipt failed: ${JSON.stringify(validateReceiptRes.body)}`);
+    }
+    console.log("  ✅ Receipt validated! Status transitioned to 'done'");
+
+    // Check stock level increased by exactly 25
+    const prodDetailAfter = await request({
+      method: "GET",
+      path: `/api/products/${macbookPro.id}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    const rackAStockAfter = prodDetailAfter.body.data.stockLevels.find((s: any) => s.locationId === rackALoc.id)?.quantity || 0;
+    console.log(`     MacBook Pro stock in Rack A AFTER receipt: ${rackAStockAfter} units (+25 added)`);
+    if (rackAStockAfter !== rackAStockBefore + 25) {
+      throw new Error(`Expected ${rackAStockBefore + 25} units, but found ${rackAStockAfter}`);
+    }
+    console.log("  ✅ Stock level accurately incremented in database");
+
+    // ── Test 33: Internal Transfer (Rack A -> Rack B) ─────────
+    console.log("\n▶ Test 33: Internal Transfer (Move 5 MacBooks from Rack A to Rack B Vault)");
+    const transferRes = await request({
+      method: "POST",
+      path: "/api/operations",
+      headers: { Authorization: `Bearer ${staffToken}` },
+      body: {
+        type: "internal",
+        sourceLocationId: rackALoc.id,
+        destLocationId: rackBLoc.id,
+        notes: "Move 5 MacBooks to High Security Vault",
+        lines: [{ productId: macbookPro.id, quantity: 5 }],
+      },
+    });
+
+    const transferOp = transferRes.body.data;
+    console.log(`  ✅ Created Internal Transfer: ${transferOp.reference}`);
+
+    const validateTransferRes = await request({
+      method: "POST",
+      path: `/api/operations/${transferOp.id}/validate`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${validateTransferRes.status}`);
+    if (validateTransferRes.status !== 200) {
+      throw new Error(`Validate transfer failed: ${JSON.stringify(validateTransferRes.body)}`);
+    }
+    console.log("  ✅ Transfer validated: 5 MacBooks deducted from Rack A and added to Rack B Vault");
+
+    // ── Test 34: Insufficient Stock Guard ────────────────────
+    console.log("\n▶ Test 34: Insufficient Stock Guard on Delivery (Attempting to ship 99,999 MacBooks)");
+    const excessiveDelRes = await request({
+      method: "POST",
+      path: "/api/operations",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        type: "delivery",
+        sourceLocationId: rackALoc.id,
+        partnerName: "Unauthorized Bulk Buyer",
+        lines: [{ productId: macbookPro.id, quantity: 99999 }],
+      },
+    });
+
+    const excessiveOpId = excessiveDelRes.body.data.id;
+    const validateExcessiveRes = await request({
+      method: "POST",
+      path: `/api/operations/${excessiveOpId}/validate`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${validateExcessiveRes.status}`);
+    if (validateExcessiveRes.status !== 400) {
+      throw new Error(`Expected 400 Bad Request for insufficient stock, got ${validateExcessiveRes.status}`);
+    }
+    console.log("  ✅ Insufficient stock correctly prevented operation (400 Bad Request)");
+
+    // ── Test 35: Valid Delivery ──────────────────────────────
+    console.log("\n▶ Test 35: POST /api/operations (Valid Delivery of 2 MacBooks to Customer)");
+    const validDelRes = await request({
+      method: "POST",
+      path: "/api/operations",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        type: "delivery",
+        sourceLocationId: rackALoc.id,
+        partnerName: "Apple Store Fifth Avenue",
+        notes: "Express Customer Order",
+        lines: [{ productId: macbookPro.id, quantity: 2 }],
+      },
+    });
+
+    const validDelId = validDelRes.body.data.id;
+    const validateDelRes = await request({
+      method: "POST",
+      path: `/api/operations/${validDelId}/validate`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${validateDelRes.status}`);
+    if (validateDelRes.status !== 200) {
+      throw new Error(`Delivery validation failed: ${JSON.stringify(validateDelRes.body)}`);
+    }
+    console.log("  ✅ Delivery validated: 2 units dispatched, stock successfully decremented");
+
+    // ── Test 36: Inventory Adjustment (Physical Count Audit) ──
+    console.log("\n▶ Test 36: POST /api/operations (Physical Count Audit Adjustment)");
+    const adjRes = await request({
+      method: "POST",
+      path: "/api/operations",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        type: "adjustment",
+        destLocationId: rackBLoc.id,
+        notes: "Physical Count Audit: Set Vault MacBooks to exactly 20 units",
+        lines: [{ productId: macbookPro.id, quantity: 20 }],
+      },
+    });
+
+    const adjId = adjRes.body.data.id;
+    const validateAdjRes = await request({
+      method: "POST",
+      path: `/api/operations/${adjId}/validate`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${validateAdjRes.status}`);
+    if (validateAdjRes.status !== 200) {
+      throw new Error(`Adjustment validation failed: ${JSON.stringify(validateAdjRes.body)}`);
+    }
+    console.log("  ✅ Inventory adjustment validated: stock level reconciled to 20 units");
+
+    // ── Test 37: Cancel Draft Operation (Task 5) ──────────────
+    console.log("\n▶ Test 37: POST /api/operations/:id/cancel (Cancel draft operation)");
+    const cancelRes = await request({
+      method: "POST",
+      path: `/api/operations/${excessiveOpId}/cancel`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${cancelRes.status}`);
+    if (cancelRes.status !== 200 || cancelRes.body.data.status !== "cancelled") {
+      throw new Error(`Cancel operation failed: ${JSON.stringify(cancelRes.body)}`);
+    }
+    console.log("  ✅ Operation status transitioned to 'cancelled'");
+
     console.log("\n══════════════════════════════════════════════════════════════");
-    console.log("🎉 ALL PHASE 1 & PHASE 2 TESTS PASSED WITH 100% SUCCESS!");
+    console.log("🎉 ALL PHASE 1, 2, 3, AND 4 TESTS PASSED WITH 100% SUCCESS!");
     console.log("══════════════════════════════════════════════════════════════\n");
   } catch (err) {
     console.error("\n❌ Test execution error:", err);

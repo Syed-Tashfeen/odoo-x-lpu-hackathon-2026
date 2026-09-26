@@ -358,31 +358,31 @@ export const stockMoves = pgTable("stock_moves", {
 
 ### Phase 3 — Warehouses & Locations (Day 2)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Warehouses CRUD                                             | `GET / POST / PATCH / DELETE /api/warehouses` |
-| 2  | Locations CRUD (nested under warehouse)                     | `GET / POST / PATCH / DELETE /api/warehouses/:id/locations` |
-| 3  | Stock overview per warehouse                                | Aggregated stock grouped by location |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Warehouses CRUD                                             | `GET / POST / PATCH / DELETE /api/warehouses` | Completed |
+| 2  | Locations CRUD (nested under warehouse)                     | `GET / POST / PATCH / DELETE /api/warehouses/:id/locations` | Completed |
+| 3  | Stock overview per warehouse                                | Aggregated stock grouped by location | Completed |
 
 ### Phase 4 — Operations Engine (Day 2–3)
 
 This is the **core** of the system. A single unified operations module handles receipts, deliveries, internal transfers, and adjustments.
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Create operation (draft)                                    | `POST /api/operations` with `type`, `lines[]` |
-| 2  | List operations with filters                                | `GET /api/operations?type=receipt&status=draft&warehouse=...` |
-| 3  | Get single operation with lines                             | `GET /api/operations/:id` |
-| 4  | Update draft operation                                      | `PATCH /api/operations/:id` — only if status=draft |
-| 5  | Cancel operation                                            | `POST /api/operations/:id/cancel` |
-| 6  | **Validate operation** (the critical endpoint)              | `POST /api/operations/:id/validate` |
-|    |                                                             | This transitions status → `done` and triggers stock mutations: |
-|    |                                                             | • **Receipt**: +qty at `dest_location`, write `stock_move(in)` |
-|    |                                                             | • **Delivery**: −qty at `source_location`, write `stock_move(out)` |
-|    |                                                             | • **Internal**: −source +dest, write `stock_move(transfer)` |
-|    |                                                             | • **Adjustment**: set qty, write `stock_move(adjustment)` |
-|    |                                                             | All mutations wrapped in a **Postgres transaction**. |
-| 7  | Auto-generate reference numbers                             | `REC-000001`, `DEL-000001`, `INT-000001`, `ADJ-000001` |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Create operation (draft)                                    | `POST /api/operations` with `type`, `lines[]` | Completed |
+| 2  | List operations with filters                                | `GET /api/operations?type=receipt&status=draft&warehouse=...` | Completed |
+| 3  | Get single operation with lines                             | `GET /api/operations/:id` | Completed |
+| 4  | Update draft operation                                      | `PATCH /api/operations/:id` — only if status=draft | Completed |
+| 5  | Cancel operation                                            | `POST /api/operations/:id/cancel` | Completed |
+| 6  | **Validate operation** (the critical endpoint)              | `POST /api/operations/:id/validate` | Completed |
+|    |                                                             | This transitions status → `done` and triggers stock mutations: | |
+|    |                                                             | • **Receipt**: +qty at `dest_location`, write `stock_move(in)` | |
+|    |                                                             | • **Delivery**: −qty at `source_location`, write `stock_move(out)` | |
+|    |                                                             | • **Internal**: −source +dest, write `stock_move(transfer)` | |
+|    |                                                             | • **Adjustment**: set qty, write `stock_move(adjustment)` | |
+|    |                                                             | All mutations wrapped in a **Postgres transaction**. | |
+| 7  | Auto-generate reference numbers                             | `REC-000001`, `DEL-000001`, `INT-000001`, `ADJ-000001` | Completed |
 
 ### Phase 5 — Stock Ledger & Alerts (Day 3)
 

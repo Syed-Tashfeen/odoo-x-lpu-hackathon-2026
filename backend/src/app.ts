@@ -10,6 +10,9 @@ import { errorHandler } from "./middleware/error.middleware.js";
 import authRoutes from "./modules/auth/auth.routes.js";
 import categoriesRoutes from "./modules/categories/categories.routes.js";
 import productsRoutes from "./modules/products/products.routes.js";
+import warehousesRoutes from "./modules/warehouses/warehouses.routes.js";
+import locationsRoutes from "./modules/warehouses/locations.routes.js";
+import operationsRoutes from "./modules/operations/operations.routes.js";
 
 // ── Logger ────────────────────────────────────────────────
 const logger = pino({
@@ -47,6 +50,15 @@ app.use("/api/categories", categoriesRoutes);
 
 app.use("/api/v1/products", productsRoutes);
 app.use("/api/products", productsRoutes);
+
+app.use("/api/v1/warehouses", warehousesRoutes);
+app.use("/api/warehouses", warehousesRoutes);
+
+app.use("/api/v1/locations", locationsRoutes);
+app.use("/api/locations", locationsRoutes);
+
+app.use("/api/v1/operations", operationsRoutes);
+app.use("/api/operations", operationsRoutes);
 
 // ── Error handler (must be last) ──────────────────────────
 app.use(errorHandler);
