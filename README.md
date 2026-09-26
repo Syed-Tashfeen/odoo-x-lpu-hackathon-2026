@@ -1,6 +1,8 @@
-# StockSense 📦
+# StockSense 
 
-> **Next-Generation Modular Inventory Management System (IMS)**  
+https://www.loom.com/share/c1c251437e63485fbba2b8262eb4c73b
+
+> **Modular Inventory Management System (IMS)**  
 > *Real-time, double-entry stock tracking, seamless operations workflow, and tamper-proof ledger auditing for modern logistics.*
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8%2B-blue.svg)](https://www.typescriptlang.org/)
