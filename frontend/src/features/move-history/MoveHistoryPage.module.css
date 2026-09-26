@@ -7,12 +7,42 @@
   gap: var(--space-5, 1.25rem);
 }
 
+/* Header matching Wireframe 1 */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-4, 1rem);
+}
+
+.leftHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 1rem);
+}
+
+.newBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: var(--radius-sm, 6px);
+  background-color: var(--color-primary, #714B67);
+  color: #FFFFFF;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.newBtn:hover {
+  background-color: var(--color-primary-hover, #5B3C53);
+  transform: translateY(-1px);
 }
 
 .title {
@@ -22,12 +52,77 @@
   margin: 0;
 }
 
-.subtitle {
-  font-size: var(--text-sm, 0.875rem);
-  color: var(--color-text-muted, #64748B);
-  margin: 0;
+/* Right Controls (Search + View Switcher) */
+.rightControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
+.searchBox {
+  position: relative;
+  min-width: 280px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-subtle, #94A3B8);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  font-size: var(--text-sm, 0.875rem);
+  border: 1px solid var(--color-border, #CBD5E1);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--color-surface, #FFFFFF);
+  color: var(--color-text, #0F172A);
+  outline: none;
+}
+
+.searchInput:focus {
+  border-color: var(--color-primary, #714B67);
+}
+
+.viewSwitcher {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--color-surface, #FFFFFF);
+}
+
+.viewBtn {
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #64748B);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.viewBtn:hover {
+  background: var(--color-surface-2, #F1F5F9);
+}
+
+.viewBtnActive {
+  background: var(--color-primary, #714B67);
+  color: #FFFFFF;
+}
+
+.viewBtnActive:hover {
+  background: var(--color-primary, #714B67);
+}
+
+/* Table Card */
 .card {
   background: var(--color-surface, #FFFFFF);
   border: 1px solid var(--color-border, #E2E8F0);
@@ -54,7 +149,7 @@
   background: #F8FAFC;
   font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
 }
 
 .table td {
@@ -64,30 +159,103 @@
   vertical-align: middle;
 }
 
+.tableRow {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tableRow:hover {
+  background-color: #F8FAFC;
+}
+
+/* Wireframe rule: In event in green, Out moves in red */
+.rowIn {
+  background-color: rgba(16, 185, 129, 0.03);
+}
+
+.rowIn:hover {
+  background-color: rgba(16, 185, 129, 0.08);
+}
+
+.rowOut {
+  background-color: rgba(239, 68, 68, 0.03);
+}
+
+.rowOut:hover {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
 .refCode {
   font-family: var(--font-mono, monospace);
   font-weight: 700;
   color: var(--color-primary, #714B67);
 }
 
-.badgeIn {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 700;
-  background: #DCFCE7;
-  color: #15803D;
-  text-transform: uppercase;
+.refCodeIn {
+  color: #059669;
 }
 
-.badgeOut {
+.refCodeOut {
+  color: #DC2626;
+}
+
+.statusBadge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 10px;
+  border-radius: 9999px;
   font-size: 11px;
   font-weight: 700;
-  background: #FEE2E2;
-  color: #B91C1C;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.statusReady { background: #DCFCE7; color: #15803D; }
+.statusDone  { background: #047857; color: #FFFFFF; }
+.statusDraft { background: #F1F5F9; color: #475569; }
+.statusWaiting { background: #FEF3C7; color: #D97706; }
+
+/* Kanban Board */
+.kanbanBoard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4, 1rem);
+}
+
+.kanbanCol {
+  background: #F8FAFC;
+  border-radius: var(--radius-md, 10px);
+  padding: var(--space-4, 1rem);
+  border: 1px solid var(--color-border, #E2E8F0);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kanbanColHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: var(--color-text, #0F172A);
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--color-border, #CBD5E1);
+}
+
+.kanbanItem {
+  background: var(--color-surface, #FFFFFF);
+  border: 1px solid var(--color-border, #E2E8F0);
+  border-radius: var(--radius-sm, 6px);
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kanbanItem:hover {
+  border-color: var(--color-primary, #714B67);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }

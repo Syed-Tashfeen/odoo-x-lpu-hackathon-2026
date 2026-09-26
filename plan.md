@@ -438,40 +438,40 @@ This is the **core** of the system. A single unified operations module handles r
 
 ### Phase 4 — Operations (Day 3–4)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Operations list page with tabs: Receipts / Deliveries / Transfers / Adjustments | Filter by status, warehouse |
-| 2  | Create Receipt form                                         | Select supplier, add product lines with qty |
-| 3  | Create Delivery form                                        | Select customer, pick product lines |
-| 4  | Create Internal Transfer form                               | Select source → dest location, product lines |
-| 5  | Create Adjustment form                                      | Select product + location, enter counted qty |
-| 6  | Operation detail page                                       | Show lines, status badge, Validate / Cancel buttons |
-| 7  | **Validate action** — confirm modal → calls `POST .../validate` | Optimistic update with TanStack Query |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Operations list page with tabs: Receipts / Deliveries / Transfers / Adjustments | Filter by status, warehouse, real-time search | Completed |
+| 2  | Create Receipt form (Wireframe 1)                           | Auto-increment reference `WH/IN/0001`, line items | Completed |
+| 3  | Create Delivery form                                        | Customer dispatches, checks stock availability | Completed |
+| 4  | Create Internal Transfer form                               | Source → destination location movement | Completed |
+| 5  | Create Adjustment form                                      | Counted qty audit with delta calculation | Completed |
+| 6  | Operation detail page                                       | Status stepper `Draft > Ready > Done`, `To DO` & `Validate` | Completed |
+| 7  | Validate action & Stock Mutation                            | Mutates stock levels and updates audit ledger | Completed |
 
 ### Phase 5 — Stock & Move History (Day 4)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Move History page                                           | Filterable table: product, location, date range, move type |
-| 2  | Stock Levels overview                                       | Per warehouse, per location breakdown |
-| 3  | Low-stock highlight in product list                         | Red badge for `qty <= reorder_point` |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Move History page                                           | Filterable table: product, location, date, move type | Completed |
+| 2  | Stock Levels overview by Location                           | Location-by-location inventory breakdown | Completed |
+| 3  | Low-stock highlight in product list & summary strip        | Quick status indicators, CSV export & print reports | Completed |
 
 ### Phase 6 — Settings & Profile (Day 4)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Warehouse management page                                   | CRUD warehouses + locations |
-| 2  | My Profile page                                             | View/edit name, email, change password |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Warehouse management page (Wireframe 2 & 3)                 | Warehouse details (`Name`, `Short Code`, `Address`) + Locations CRUD | Completed |
+| 2  | My Profile page                                             | View/edit name, email, change password | Completed |
 
 ### Phase 7 — Polish (Day 4–5)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Toast notifications (react-hot-toast)                       | Success/error on all mutations |
-| 2  | Loading skeletons                                           | On all data-fetching views |
-| 3  | Empty states                                                | "No products yet" illustrations |
-| 4  | Responsive sidebar (collapse on mobile)                     | |
-| 5  | Dark mode toggle                                            | CSS variables swap |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Toast notifications (react-hot-toast)                       | Success/error on all mutations | Completed |
+| 2  | Loading skeletons                                           | On all data-fetching views | Completed |
+| 3  | Empty states                                                | "No products yet" illustrations & CTAs | Completed |
+| 4  | Responsive sidebar & navigation (collapse on mobile)        | Mobile optimized layout & views | Completed |
+| 5  | Dark mode toggle                                            | Instant CSS variables theme switch with localStorage persistence | Completed |
 
 ---
 

@@ -2,7 +2,7 @@ import api from './axios';
 import { productsService } from './productsService';
 
 export type OperationType = 'receipt' | 'delivery' | 'internal' | 'adjustment';
-export type OperationStatus = 'draft' | 'ready' | 'done' | 'cancelled';
+export type OperationStatus = 'draft' | 'waiting' | 'ready' | 'done' | 'cancelled';
 
 export interface OperationLine {
   id: string;
@@ -143,8 +143,8 @@ export const DEFAULT_OPERATIONS: Operation[] = [
     status: 'ready',
     warehouseCode: 'WH',
     fromLocation: 'WH/Stock1',
-    toLocation: 'Customer Location',
-    contact: 'Modern Tech Labs',
+    toLocation: 'vendor',
+    contact: 'Azure Interior',
     responsible: 'Syed Tashfeen',
     scheduledDate: '2026-09-29',
     lines: [
@@ -153,7 +153,53 @@ export const DEFAULT_OPERATIONS: Operation[] = [
         productId: 'prod_desk001',
         productName: 'Desk Large Wooden',
         sku: 'DESK001',
+        quantity: 6,
+        quantityDone: 0,
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'op_del_0002',
+    reference: 'WH/OUT/0002',
+    type: 'delivery',
+    status: 'ready',
+    warehouseCode: 'WH',
+    fromLocation: 'WH/Stock1',
+    toLocation: 'vendor',
+    contact: 'Azure Interior',
+    responsible: 'Syed Tashfeen',
+    scheduledDate: '2026-09-30',
+    lines: [
+      {
+        id: 'line_d2_1',
+        productId: 'prod_chair01',
+        productName: 'Ergonomic Office Chair',
+        sku: 'CHAIR01',
         quantity: 2,
+        quantityDone: 0,
+      },
+    ],
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'op_del_0003',
+    reference: 'WH/OUT/0003',
+    type: 'delivery',
+    status: 'waiting',
+    warehouseCode: 'WH',
+    fromLocation: 'WH/Stock1',
+    toLocation: 'Customer Location',
+    contact: 'Deco Addict',
+    responsible: 'Syed Tashfeen',
+    scheduledDate: '2026-10-02',
+    lines: [
+      {
+        id: 'line_d3_1',
+        productId: 'prod_desk001',
+        productName: 'Desk Large Wooden',
+        sku: 'DESK001',
+        quantity: 999,
         quantityDone: 0,
       },
     ],
@@ -406,6 +452,20 @@ export const operationsService = {
   },
 
   /**
+   * Transition to Waiting (Wireframe: "Waiting: Waiting for the out of stock product to be in")
+   */
+  async markAsWaiting(id: string): Promise<Operation> {
+    const list = getStoredOperations();
+    const index = list.findIndex((o) => o.id === id);
+    if (index === -1) throw new Error('Operation not found');
+
+    list[index].status = 'waiting';
+    list[index].updatedAt = new Date().toISOString();
+    saveStoredOperations(list);
+    return list[index];
+  },
+
+  /**
    * Transition Ready -> Done (Wireframe: "onclick, Validate move to Done")
    * This also mutates the actual stock for the involved products!
    */
@@ -441,6 +501,32 @@ export const operationsService = {
           const newTotal = Math.max(0, prod.totalStock - line.quantity);
           const loc = prod.stockByLocation.find((s) => s.locationName === op.fromLocation) || prod.stockByLocation[0];
           if (loc) loc.quantity = Math.max(0, loc.quantity - line.quantity);
+          await productsService.updateProduct(prod.id, {
+            totalStock: newTotal,
+            stockByLocation: [...prod.stockByLocation],
+          });
+        } else if (op.type === 'internal') {
+          // Internal transfer between locations
+          const fromLoc = prod.stockByLocation.find((s) => s.locationName === op.fromLocation);
+          let toLoc = prod.stockByLocation.find((s) => s.locationName === op.toLocation);
+          if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
+          if (!toLoc && op.toLocation) {
+            toLoc = { locationId: `loc_${Date.now()}`, locationName: op.toLocation, quantity: 0 };
+            prod.stockByLocation.push(toLoc);
+          }
+          if (toLoc) toLoc.quantity += line.quantity;
+          await productsService.updateProduct(prod.id, {
+            stockByLocation: [...prod.stockByLocation],
+          });
+        } else if (op.type === 'adjustment') {
+          // Physical inventory adjustment: line.quantity is counted quantity
+          let loc = prod.stockByLocation.find((s) => s.locationName === op.toLocation);
+          if (!loc && op.toLocation) {
+            loc = { locationId: `loc_${Date.now()}`, locationName: op.toLocation, quantity: 0 };
+            prod.stockByLocation.push(loc);
+          }
+          if (loc) loc.quantity = line.quantity;
+          const newTotal = prod.stockByLocation.reduce((acc, s) => acc + s.quantity, 0);
           await productsService.updateProduct(prod.id, {
             totalStock: newTotal,
             stockByLocation: [...prod.stockByLocation],

@@ -153,19 +153,44 @@ export const authService = {
    * Login user with Login Id or Email and password.
    * Throws "Invalid Login Id or Password" on mismatch.
    */
-  async login(loginIdOrEmail: string, password: string):Promise<AuthSuccessResult> {
+  async login(loginIdOrEmail: string, password: string): Promise<AuthSuccessResult> {
     const trimmedId = loginIdOrEmail.trim().toLowerCase();
 
-    // Try backend API first if running in browser non-test mode
+    // 1. Check local client-side persistent user database first
+    const users = getUsersFromDb();
+    const matchedUser = users.find((u) => {
+      const emailMatch = u.email.toLowerCase() === trimmedId;
+      const loginIdMatch = u.loginId.toLowerCase() === trimmedId;
+      return (emailMatch || loginIdMatch) && u.password === password;
+    });
+
+    if (matchedUser) {
+      const authUser: AuthUser = {
+        id: matchedUser.id,
+        name: matchedUser.name,
+        email: matchedUser.email,
+        role: matchedUser.role,
+        status: matchedUser.status,
+        emailVerified: matchedUser.emailVerified,
+        createdAt: matchedUser.createdAt,
+      };
+
+      const token = `stocksense_jwt_${matchedUser.id}_${Date.now()}`;
+      return { user: authUser, token };
+    }
+
+    // 3. Fallback: try backend API with a short 2.5s timeout if running
     const isTest =
       (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test') ||
       (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'test');
+
     if (!isTest) {
       try {
-        const response = await api.post('/auth/login', {
-          email: trimmedId,
-          password,
-        });
+        const response = await api.post(
+          '/auth/login',
+          { email: trimmedId, password },
+          { timeout: 2500 }
+        );
         if (response.data?.data) {
           const { user, accessToken } = response.data.data;
           return {
@@ -181,38 +206,12 @@ export const authService = {
             token: accessToken,
           };
         }
-      } catch (err: any) {
-        // If server explicitly returned 401, handle via database
-        if (err.response?.status === 401) {
-          throw new Error('Invalid Login Id or Password');
-        }
+      } catch {
+        // Fall through to error
       }
     }
 
-    // Check client-side persistent user database
-    const users = getUsersFromDb();
-    const matchedUser = users.find((u) => {
-      const emailMatch = u.email.toLowerCase() === trimmedId;
-      const loginIdMatch = u.loginId.toLowerCase() === trimmedId;
-      return (emailMatch || loginIdMatch) && u.password === password;
-    });
-
-    if (!matchedUser) {
-      throw new Error('Invalid Login Id or Password');
-    }
-
-    const authUser: AuthUser = {
-      id: matchedUser.id,
-      name: matchedUser.name,
-      email: matchedUser.email,
-      role: matchedUser.role,
-      status: matchedUser.status,
-      emailVerified: matchedUser.emailVerified,
-      createdAt: matchedUser.createdAt,
-    };
-
-    const token = `stocksense_jwt_${matchedUser.id}_${Date.now()}`;
-    return { user: authUser, token };
+    throw new Error('Invalid Login Id or Password');
   },
 
   /**

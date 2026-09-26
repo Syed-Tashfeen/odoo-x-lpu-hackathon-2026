@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams, NavLink } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../stores/authStore';
 import {
@@ -156,13 +156,25 @@ export default function OperationsPage() {
     }
   };
 
-  // Wireframe Workflow: Draft -> Ready (To DO button)
-  const handleMarkAsReady = async () => {
+  // Wireframe Workflow: Draft/Waiting -> Check Availability -> Ready or Waiting
+  const handleCheckAvailabilityOrReady = async () => {
     if (!activeOperation) return;
+    // Check if any product has insufficient stock for deliveries/transfers
+    const outItem = activeOperation.lines.find((line) => {
+      const p = products.find((prod) => prod.id === line.productId || prod.sku === line.sku);
+      return p && p.totalStock < line.quantity;
+    });
+
     try {
-      const updated = await operationsService.markAsReady(activeOperation.id);
-      setActiveOperation(updated);
-      toast.success('Status updated to Ready');
+      if ((activeOperation.type === 'delivery' || activeOperation.type === 'internal') && outItem) {
+        const updated = await operationsService.markAsWaiting(activeOperation.id);
+        setActiveOperation(updated);
+        toast.error(`Out of stock for ${outItem.productName}! Operation marked as Waiting.`);
+      } else {
+        const updated = await operationsService.markAsReady(activeOperation.id);
+        setActiveOperation(updated);
+        toast.success('Stock reserved! Status updated to Ready.');
+      }
       loadOperations();
     } catch {
       toast.error('Failed to update status');
@@ -182,7 +194,7 @@ export default function OperationsPage() {
     }
   };
 
-  // Wireframe: Print the receipt once it's DONE
+  // Wireframe: Print the receipt/delivery once confirmed
   const handlePrint = () => {
     window.print();
   };
@@ -217,17 +229,29 @@ export default function OperationsPage() {
   };
 
   // ============================================================
-  // RENDER: Detailed View (Wireframe 1) or New Form
+  // RENDER: Detailed View (Wireframe 5) or New Form
   // ============================================================
   if (activeOperation || isEditing) {
     const isNew = isEditing;
     const op = activeOperation;
     const currentStatus = isNew ? 'draft' : op?.status || 'draft';
 
+    // Check if any product is out of stock in current view
+    const checkIsOutOfStock = (productId: string, sku: string, qty: number) => {
+      if (opType !== 'delivery' && opType !== 'internal') return false;
+      const prod = products.find((p) => p.id === productId || p.sku === sku);
+      if (!prod) return false;
+      return prod.totalStock < qty;
+    };
+
+    const hasOutOfStockItem = isNew
+      ? formFields.lines.some((l) => checkIsOutOfStock(l.productId, '', Number(l.quantity) || 0))
+      : op?.lines.some((l) => checkIsOutOfStock(l.productId, l.sku, l.quantity)) || false;
+
     return (
       <div className={styles.container}>
         <div className={styles.detailContainer}>
-          {/* Top Bar matching Wireframe 1 */}
+          {/* Top Bar matching Wireframe 5 */}
           <div className={styles.detailTopBar}>
             <div className={styles.actionBtns}>
               {/* Back to list */}
@@ -237,7 +261,7 @@ export default function OperationsPage() {
                 onClick={handleBackToList}
                 title="Back to list"
               >
-                ← Receipts
+                ← {opTitle}
               </button>
 
               {/* [New] Button */}
@@ -249,7 +273,7 @@ export default function OperationsPage() {
                 New
               </button>
 
-              {/* Status Action Button: "To DO" in Draft, "Validate" in Ready */}
+              {/* Action Buttons: To DO / Check Availability in Draft/Waiting, Validate in Ready */}
               {isNew ? (
                 <button
                   type="button"
@@ -258,13 +282,14 @@ export default function OperationsPage() {
                 >
                   Save as Draft
                 </button>
-              ) : currentStatus === 'draft' ? (
+              ) : currentStatus === 'draft' || currentStatus === 'waiting' ? (
                 <button
                   type="button"
                   className={styles.actionBtnPrimary}
-                  onClick={handleMarkAsReady}
+                  onClick={handleCheckAvailabilityOrReady}
+                  title="Check product stock availability"
                 >
-                  To DO
+                  {currentStatus === 'waiting' ? 'Re-check Availability' : 'To DO / Check Availability'}
                 </button>
               ) : currentStatus === 'ready' ? (
                 <button
@@ -298,20 +323,31 @@ export default function OperationsPage() {
               )}
             </div>
 
-            {/* Breadcrumb status widget: Draft > Ready > Done */}
+            {/* Breadcrumb status widget matching Wireframe 5: Draft > Waiting > Ready > Done */}
             <div className={styles.statusBreadcrumb}>
               <div
                 className={`${styles.stepItem} ${
                   currentStatus === 'draft' ? styles.stepItemActive : ''
                 }`}
+                title="Draft: Initial state"
               >
                 Draft
               </div>
               <span className={styles.stepSeparator}>&gt;</span>
               <div
                 className={`${styles.stepItem} ${
+                  currentStatus === 'waiting' ? styles.stepItemActive : ''
+                }`}
+                title="Waiting: Waiting for the out of stock product to be in"
+              >
+                Waiting
+              </div>
+              <span className={styles.stepSeparator}>&gt;</span>
+              <div
+                className={`${styles.stepItem} ${
                   currentStatus === 'ready' ? styles.stepItemActive : ''
                 }`}
+                title="Ready: Ready to deliver/receive"
               >
                 Ready
               </div>
@@ -320,6 +356,7 @@ export default function OperationsPage() {
                 className={`${styles.stepItem} ${
                   currentStatus === 'done' ? styles.stepItemActive : ''
                 }`}
+                title="Done: Received or delivered"
               >
                 Done
               </div>
@@ -336,17 +373,20 @@ export default function OperationsPage() {
             </h1>
           </div>
 
-          {/* Form Fields: Receive From, Schedule Date, Responsible */}
+          {/* Form Fields matching Wireframe 5: Delivery Address / Receive From, Schedule Date, Responsible, Operation Type */}
           {isNew ? (
             <form onSubmit={handleSaveNewOperation} className={styles.detailContainer} style={{ border: 'none', padding: 0 }}>
               <div className={styles.formGrid}>
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Receive From (Contact / Vendor)</label>
+                  <label className={styles.fieldLabel}>
+                    {opType === 'delivery' ? 'Delivery Address' : 'Receive From (Contact)'}
+                  </label>
                   <input
                     type="text"
                     className={styles.fieldInput}
                     value={formFields.receiveFrom}
                     onChange={(e) => setFormFields({ ...formFields, receiveFrom: e.target.value })}
+                    placeholder={opType === 'delivery' ? 'e.g. Azure Interior, 45 Main St' : 'e.g. Azure Interior'}
                     required
                   />
                 </div>
@@ -363,7 +403,7 @@ export default function OperationsPage() {
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Responsible (Logged-in User)</label>
+                  <label className={styles.fieldLabel}>Responsible</label>
                   <input
                     type="text"
                     className={`${styles.fieldInput} ${styles.fieldInputReadOnly}`}
@@ -373,108 +413,135 @@ export default function OperationsPage() {
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Destination Location (Warehouse)</label>
+                  <label className={styles.fieldLabel}>Operation type</label>
                   <select
                     className={styles.fieldInput}
-                    value={formFields.toLocation}
-                    onChange={(e) => setFormFields({ ...formFields, toLocation: e.target.value })}
+                    value={opType}
+                    disabled
                   >
-                    <option value="WH/Stock1">WH/Stock1 (Primary Warehouse)</option>
-                    <option value="WH/Rack A">WH/Rack A</option>
-                    <option value="WH/Production">WH/Production</option>
+                    <option value="receipt">Receipt</option>
+                    <option value="delivery">Delivery</option>
+                    <option value="internal">Internal Transfer</option>
+                    <option value="adjustment">Stock Adjustment</option>
                   </select>
                 </div>
               </div>
 
-              {/* Products Table */}
+              {/* Wireframe 5: Out of stock alert notification */}
+              {hasOutOfStockItem && (
+                <div className={styles.outOfStockAlertBanner} style={{ marginTop: 16 }}>
+                  <span style={{ fontSize: 18 }}>⚠️</span>
+                  <div>
+                    <strong>Stock Alert: </strong>
+                    One or more selected products are out of stock or exceed inventory on hand. Lines are marked in red and operation will enter Waiting state.
+                  </div>
+                </div>
+              )}
+
+              {/* Products Table matching Wireframe 5 */}
               <div className={styles.productsSection}>
                 <h3 className={styles.sectionHeading}>Products</h3>
 
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th style={{ width: '65%' }}>Product</th>
-                      <th style={{ width: '25%' }}>Quantity</th>
+                      <th style={{ width: '60%' }}>Product</th>
+                      <th style={{ width: '30%' }}>Quantity</th>
                       <th style={{ width: '10%' }}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {formFields.lines.map((line, idx) => (
-                      <tr key={idx}>
-                        <td>
-                          <select
-                            className={styles.fieldInput}
-                            style={{ width: '100%' }}
-                            value={line.productId}
-                            onChange={(e) => {
-                              const next = [...formFields.lines];
-                              next[idx].productId = e.target.value;
-                              setFormFields({ ...formFields, lines: next });
-                            }}
-                            required
-                          >
-                            <option value="">Select product...</option>
-                            {products.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                [{p.sku}] {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            min="1"
-                            className={styles.fieldInput}
-                            style={{ width: '100%' }}
-                            value={line.quantity}
-                            onChange={(e) => {
-                              const next = [...formFields.lines];
-                              next[idx].quantity = Number(e.target.value) || 1;
-                              setFormFields({ ...formFields, lines: next });
-                            }}
-                            required
-                          />
-                        </td>
-                        <td style={{ textAlign: 'center' }}>
-                          {formFields.lines.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveLine(idx)}
-                              style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 16 }}
+                    {formFields.lines.map((line, idx) => {
+                      const isOut = checkIsOutOfStock(line.productId, '', Number(line.quantity) || 0);
+                      const currentProd = products.find((p) => p.id === line.productId);
+
+                      return (
+                        <tr key={idx} className={isOut ? styles.rowOutOfStock : undefined}>
+                          <td>
+                            <select
+                              className={styles.fieldInput}
+                              style={{ width: '100%' }}
+                              value={line.productId}
+                              onChange={(e) => {
+                                const next = [...formFields.lines];
+                                next[idx].productId = e.target.value;
+                                setFormFields({ ...formFields, lines: next });
+                              }}
+                              required
                             >
-                              ✕
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                              <option value="">Select product...</option>
+                              {products.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  [{p.sku}] {p.name} ({p.totalStock} in stock)
+                                </option>
+                              ))}
+                            </select>
+                            {isOut && (
+                              <div style={{ marginTop: 4 }}>
+                                <span className={styles.stockWarningTag}>
+                                  ⚠️ Out of stock (Only {currentProd?.totalStock ?? 0} available)
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="1"
+                              className={styles.fieldInput}
+                              style={{ width: '100%' }}
+                              value={line.quantity}
+                              onChange={(e) => {
+                                const next = [...formFields.lines];
+                                next[idx].quantity = Number(e.target.value) || 1;
+                                setFormFields({ ...formFields, lines: next });
+                              }}
+                              required
+                            />
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            {formFields.lines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLine(idx)}
+                                style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 16 }}
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
 
+                {/* Wireframe 5: "+ Add New product" */}
                 <button
                   type="button"
                   className={styles.addLineBtn}
                   onClick={handleAddLine}
                 >
-                  + Add a line
+                  + Add New product
                 </button>
               </div>
 
               <div style={{ marginTop: 20 }}>
                 <button type="submit" className={styles.actionBtnPrimary}>
-                  Save & Confirm Receipt
+                  Save & Confirm {singleTitle}
                 </button>
               </div>
             </form>
           ) : (
             <>
-              {/* Read / Active Operation details */}
+              {/* Read / Active Operation details matching Wireframe 5 */}
               <div className={styles.formGrid}>
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Receive From</label>
+                  <label className={styles.fieldLabel}>
+                    {op?.type === 'delivery' ? 'Delivery Address' : 'Receive From'}
+                  </label>
                   <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
-                    {op?.contact || '—'}
+                    {op?.contact || 'Azure Interior'}
                   </div>
                 </div>
 
@@ -493,14 +560,25 @@ export default function OperationsPage() {
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Destination Location</label>
-                  <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
-                    {op?.toLocation || 'WH/Stock1'}
+                  <label className={styles.fieldLabel}>Operation type</label>
+                  <div className={styles.fieldInput} style={{ background: '#F8FAFC', textTransform: 'capitalize' }}>
+                    {op?.type === 'receipt' ? 'Receipt' : op?.type === 'delivery' ? 'Delivery' : op?.type === 'internal' ? 'Internal Transfer' : 'Stock Adjustment'}
                   </div>
                 </div>
               </div>
 
-              {/* Products Lines Table */}
+              {/* Wireframe 5: Out of stock alert notification */}
+              {hasOutOfStockItem && (
+                <div className={styles.outOfStockAlertBanner} style={{ marginTop: 16 }}>
+                  <span style={{ fontSize: 18 }}>⚠️</span>
+                  <div>
+                    <strong>Stock Alert: </strong>
+                    One or more products on this {singleTitle.toLowerCase()} are currently out of stock. Lines are highlighted in red below and status is in <strong>Waiting</strong> state.
+                  </div>
+                </div>
+              )}
+
+              {/* Products Lines Table matching Wireframe 5 */}
               <div className={styles.productsSection}>
                 <h3 className={styles.sectionHeading}>Products</h3>
 
@@ -508,22 +586,37 @@ export default function OperationsPage() {
                   <thead>
                     <tr>
                       <th>Product</th>
-                      <th style={{ textAlign: 'right' }}>Planned Quantity</th>
-                      <th style={{ textAlign: 'right' }}>Processed Quantity</th>
+                      <th style={{ textAlign: 'right' }}>Quantity</th>
+                      <th style={{ textAlign: 'right' }}>Availability</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {op?.lines.map((l) => (
-                      <tr key={l.id}>
-                        <td>
-                          <strong>[{l.sku}]</strong> {l.productName}
-                        </td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.quantity}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700, color: op.status === 'done' ? '#047857' : '#64748B' }}>
-                          {op.status === 'done' ? l.quantity : l.quantityDone ?? 0}
-                        </td>
-                      </tr>
-                    ))}
+                    {op?.lines.map((l) => {
+                      const isOut = checkIsOutOfStock(l.productId, l.sku, l.quantity);
+                      const prod = products.find((p) => p.id === l.productId || p.sku === l.sku);
+                      const available = prod ? prod.totalStock : 0;
+
+                      return (
+                        <tr key={l.id} className={isOut ? styles.rowOutOfStock : undefined}>
+                          <td>
+                            <strong>[{l.sku}]</strong> {l.productName}
+                            {isOut && (
+                              <span className={styles.stockWarningTag}>
+                                ⚠️ Out of Stock
+                              </span>
+                            )}
+                          </td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.quantity}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: isOut ? '#DC2626' : '#15803D' }}>
+                            {op.type === 'receipt'
+                              ? 'Incoming'
+                              : isOut
+                              ? `${available} in stock (Short: ${l.quantity - available})`
+                              : `${available} in stock`}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -539,6 +632,34 @@ export default function OperationsPage() {
   // ============================================================
   return (
     <div className={styles.container}>
+      {/* Operation Type Switcher Tabs */}
+      <div className={styles.typeTabs}>
+        <NavLink
+          to="/operations/receipts"
+          className={({ isActive }) => `${styles.typeTab} ${isActive ? styles.typeTabActive : ''}`}
+        >
+          📥 Receipts
+        </NavLink>
+        <NavLink
+          to="/operations/deliveries"
+          className={({ isActive }) => `${styles.typeTab} ${isActive ? styles.typeTabActive : ''}`}
+        >
+          🚚 Deliveries
+        </NavLink>
+        <NavLink
+          to="/operations/transfers"
+          className={({ isActive }) => `${styles.typeTab} ${isActive ? styles.typeTabActive : ''}`}
+        >
+          🔄 Internal Transfers
+        </NavLink>
+        <NavLink
+          to="/operations/adjustments"
+          className={({ isActive }) => `${styles.typeTab} ${isActive ? styles.typeTabActive : ''}`}
+        >
+          ⚖️ Physical Inventory Adjustments
+        </NavLink>
+      </div>
+
       {/* Top Header matching Wireframe 2 */}
       <header className={styles.header}>
         <div className={styles.leftHeader}>
@@ -631,6 +752,8 @@ export default function OperationsPage() {
                       ? styles.statusReady
                       : o.status === 'done'
                       ? styles.statusDone
+                      : o.status === 'waiting'
+                      ? styles.statusWaiting
                       : o.status === 'cancelled'
                       ? styles.statusCancelled
                       : styles.statusDraft;
@@ -659,9 +782,9 @@ export default function OperationsPage() {
           </div>
         </div>
       ) : (
-        /* Kanban View (Grouped by Draft, Ready, Done) */
+        /* Kanban View (Grouped by Draft, Waiting, Ready, Done) */
         <div className={styles.kanbanBoard}>
-          {(['draft', 'ready', 'done'] as const).map((colStatus) => {
+          {(['draft', 'waiting', 'ready', 'done'] as const).map((colStatus) => {
             const items = operations.filter((o) => o.status === colStatus);
             return (
               <div key={colStatus} className={styles.kanbanCol}>

@@ -25,10 +25,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
-      // Token expired / invalid — clear auth and redirect to login
+    const url = err.config?.url || '';
+    const isAuthRoute =
+      url.includes('/auth/login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/signup') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
+
+    if (err.response?.status === 401 && !isAuthRoute) {
+      // Token expired on protected API route — clear auth and redirect to login
       useAuthStore.getState().logout();
-      window.location.href = '/auth/login';
+      window.location.href = '/login';
     }
     return Promise.reject(err);
   }
