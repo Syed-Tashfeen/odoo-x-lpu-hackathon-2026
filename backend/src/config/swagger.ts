@@ -26,7 +26,7 @@ export function setupSwagger(app: Express): void {
   const doc = generator.generateDocument({
     openapi: "3.0.0",
     info: {
-      title: "QuickCourt API v1",
+      title: "StockSense API v1",
       version: "1.0.0",
       description:
         "Authentication & REST API for QuickCourt. Built with Express, Drizzle ORM & Zod.",
