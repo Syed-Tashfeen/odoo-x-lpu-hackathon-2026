@@ -1,4 +1,4 @@
-import { eq, or, ilike, sql, and, desc } from "drizzle-orm";
+import { eq, or, ilike, sql, and, desc, inArray } from "drizzle-orm";
 import { db } from "../../config/db.js";
 import {
   products,
@@ -84,8 +84,46 @@ export async function listProducts(query: {
   const total = formatted.length;
   const paginated = formatted.slice(offset, offset + limit);
 
+  const prodIds = paginated.map((p) => p.id);
+  let allStockLevels: Array<{
+    productId: string;
+    locationId: string;
+    locationName: string;
+    quantity: number;
+  }> = [];
+
+  if (prodIds.length > 0) {
+    allStockLevels = await db
+      .select({
+        productId: stockLevels.productId,
+        locationId: stockLevels.locationId,
+        locationName: locations.name,
+        quantity: stockLevels.quantity,
+      })
+      .from(stockLevels)
+      .innerJoin(locations, eq(locations.id, stockLevels.locationId))
+      .where(inArray(stockLevels.productId, prodIds));
+  }
+
+  const stockByProd = allStockLevels.reduce<
+    Record<string, Array<{ locationId: string; locationName: string; quantity: number }>>
+  >((acc, sl) => {
+    if (!acc[sl.productId]) acc[sl.productId] = [];
+    acc[sl.productId].push({
+      locationId: sl.locationId,
+      locationName: sl.locationName,
+      quantity: sl.quantity,
+    });
+    return acc;
+  }, {});
+
+  const dataWithStock = paginated.map((p) => ({
+    ...p,
+    stockByLocation: stockByProd[p.id] || [],
+  }));
+
   return {
-    data: paginated,
+    data: dataWithStock,
     meta: {
       total,
       page,
@@ -162,6 +200,8 @@ export async function createProduct(data: {
   imageUrl?: string | null;
   reorderPoint?: number;
   reorderQty?: number;
+  initialStock?: number;
+  initialLocationId?: string | null;
 }) {
   const trimmedSku = data.sku.trim().toUpperCase();
 
@@ -211,6 +251,26 @@ export async function createProduct(data: {
       reorderQty: data.reorderQty ?? 0,
     })
     .returning();
+
+  // Insert initial stock if provided
+  if (data.initialStock && data.initialStock > 0) {
+    let locId = data.initialLocationId || null;
+    if (!locId) {
+      const [firstLoc] = await db
+        .select({ id: locations.id })
+        .from(locations)
+        .where(eq(locations.type, "internal"))
+        .limit(1);
+      locId = firstLoc?.id || null;
+    }
+    if (locId) {
+      await db.insert(stockLevels).values({
+        productId: product.id,
+        locationId: locId,
+        quantity: data.initialStock,
+      });
+    }
+  }
 
   return getProductById(product.id);
 }

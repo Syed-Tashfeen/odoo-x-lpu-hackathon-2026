@@ -35,6 +35,8 @@ export const createProductSchema = z
     imageUrl: z.string().optional().nullable().openapi({ example: "https://example.com/img.png" }),
     reorderPoint: z.coerce.number().int().min(0, "Reorder point must be >= 0").default(0).openapi({ example: 50 }),
     reorderQty: z.coerce.number().int().min(0, "Reorder quantity must be >= 0").default(0).openapi({ example: 100 }),
+    initialStock: z.coerce.number().int().min(0).optional().openapi({ example: 50 }),
+    initialLocationId: z.string().optional().nullable(),
   })
   .openapi("CreateProductRequest");
 

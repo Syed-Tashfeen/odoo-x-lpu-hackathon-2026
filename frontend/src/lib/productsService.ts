@@ -223,8 +223,11 @@ export function getStoredProducts(): Product[] {
   }
 }
 
-export function saveStoredProducts(products: Product[]): void {
+export function saveStoredProducts(products: Product[], silent = false): void {
   localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products.map(withComputedFlags)));
+  if (!silent && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('stocksense:data-changed'));
+  }
 }
 
 export const productsService = {
@@ -304,20 +307,22 @@ export const productsService = {
           sku: p.sku,
           name: p.name,
           categoryId: p.categoryId,
-          categoryName: p.category?.name || 'General',
+          categoryName: p.categoryName || p.category?.name || 'General',
           unitOfMeasure: p.unitOfMeasure,
           description: p.description,
           imageUrl: p.imageUrl,
           reorderPoint: p.reorderPoint || 0,
           reorderQty: p.reorderQty || 0,
-          totalStock: p.totalStock || 0,
-          stockByLocation: p.stockByLocation || [
-            { locationId: 'loc_wh_stock1', locationName: 'WH/Stock1', quantity: p.totalStock || 0 },
-          ],
+          totalStock: Number(p.totalStock) || 0,
+          stockByLocation: Array.isArray(p.stockByLocation) && p.stockByLocation.length > 0
+            ? p.stockByLocation
+            : [
+                { locationId: 'loc_wh_stock1', locationName: 'WH/Stock1', quantity: Number(p.totalStock) || 0 },
+              ],
           createdAt: p.createdAt || new Date().toISOString(),
         }));
         if (serverProducts.length > 0) {
-          saveStoredProducts(serverProducts);
+          saveStoredProducts(serverProducts, true);
           list = serverProducts.map(withComputedFlags);
         }
       }
@@ -438,7 +443,7 @@ export const productsService = {
       if (res.data?.data?.id) {
         newProduct.id = res.data.data.id;
         list[0].id = res.data.data.id;
-        saveStoredProducts(list);
+        saveStoredProducts(list, true);
       }
     } catch {
       // Offline fallback

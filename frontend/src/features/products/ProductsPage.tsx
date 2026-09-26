@@ -69,6 +69,8 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadData();
+    window.addEventListener('stocksense:data-changed', loadData);
+    return () => window.removeEventListener('stocksense:data-changed', loadData);
   }, [search, selectedCategory, lowStockOnly]);
 
   const handleCreateProduct = async (e: React.FormEvent) => {

@@ -1,15 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { dashboardService, type DashboardData } from '../../lib/dashboardService';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import type { Operation } from '../../lib/operationsService';
 import styles from './DashboardPage.module.css';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const [data, setData] = useState<DashboardData | null>(null);
+  const { data, isLoading, isRefreshing, fetchDashboardData } = useDashboardStore();
   const [selectedType, setSelectedType] = useState<string>('all');
-  const [isLoading, setIsLoading] = useState(true);
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -19,17 +18,8 @@ export default function DashboardPage() {
   });
 
   useEffect(() => {
-    let mounted = true;
-    dashboardService.getDashboardData().then((res) => {
-      if (mounted) {
-        setData(res);
-        setIsLoading(false);
-      }
-    });
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const handleRowClick = (op: Operation) => {
     if (op.type === 'receipt') {
@@ -45,14 +35,19 @@ export default function DashboardPage() {
     navigate(`/operations/receipts?action=new&sku=${encodeURIComponent(sku)}&name=${encodeURIComponent(name)}`);
   };
 
-  if (isLoading || !data) {
+  if (isLoading && !data) {
     return (
       <div className={styles.page}>
-        <div style={{ padding: '60px 0', textAlign: 'center', color: '#64748B' }}>
-          Loading dashboard metrics...
+        <div style={{ padding: '80px 0', textAlign: 'center', color: '#64748B' }}>
+          <div className={styles.spinner} />
+          <div style={{ fontWeight: 500 }}>Loading dashboard metrics...</div>
         </div>
       </div>
     );
+  }
+
+  if (!data) {
+    return null;
   }
 
   const filteredOps =
@@ -76,6 +71,31 @@ export default function DashboardPage() {
             <option value="wh_main">Main Warehouse (WH)</option>
             <option value="wh_north">North Distribution Center</option>
           </select>
+
+          <button
+            type="button"
+            className={styles.refreshBtn}
+            onClick={() => fetchDashboardData({ force: true })}
+            disabled={isRefreshing}
+            title="Refresh metrics from server"
+          >
+            <svg
+              className={isRefreshing ? styles.spin : ''}
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="23 4 23 10 17 10" />
+              <polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+            {isRefreshing ? 'Updating...' : 'Refresh'}
+          </button>
 
           <Link to="/operations/receipts?action=new" className={styles.primaryBtn}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

@@ -16,6 +16,7 @@ interface MoveHistoryRow {
   sku: string;
   status: string;
   isIncoming: boolean;
+  operationType?: 'receipt' | 'delivery' | 'internal' | 'adjustment';
 }
 
 export default function MoveHistoryPage() {
@@ -26,54 +27,60 @@ export default function MoveHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    operationsService.getOperations().then((ops: Operation[]) => {
-      const generatedRows: MoveHistoryRow[] = [];
+    const loadMoveHistory = () => {
+      operationsService.getOperations().then((ops: Operation[]) => {
+        const generatedRows: MoveHistoryRow[] = [];
 
-      for (const op of ops) {
-        const isIncoming = op.type === 'receipt';
-        // Date format: e.g. 12/1/2026
-        const dateFormatted = op.completedDate || op.scheduledDate;
+        for (const op of ops) {
+          const isIncoming = op.type === 'receipt';
+          const dateFormatted = op.completedDate || op.scheduledDate;
 
-        // "if single reference has multiple product display it in multiple rows."
-        if (op.lines && op.lines.length > 0) {
-          for (let i = 0; i < op.lines.length; i++) {
-            const line = op.lines[i];
+          if (op.lines && op.lines.length > 0) {
+            for (let i = 0; i < op.lines.length; i++) {
+              const line = op.lines[i];
+              generatedRows.push({
+                rowId: `${op.id}_line_${i}`,
+                operationId: op.id,
+                reference: op.reference,
+                date: dateFormatted,
+                contact: op.contact || 'Azure Interior',
+                from: op.fromLocation || (isIncoming ? 'vendor' : 'WH/Stock1'),
+                to: op.toLocation || (isIncoming ? 'WH/Stock1' : 'vendor'),
+                quantity: line.quantity,
+                productName: line.productName,
+                sku: line.sku,
+                status: op.status === 'ready' ? 'Ready' : op.status === 'done' ? 'Done' : op.status === 'waiting' ? 'Waiting' : 'Draft',
+                isIncoming,
+                operationType: op.type,
+              });
+            }
+          } else {
             generatedRows.push({
-              rowId: `${op.id}_line_${i}`,
+              rowId: `${op.id}_0`,
               operationId: op.id,
               reference: op.reference,
               date: dateFormatted,
               contact: op.contact || 'Azure Interior',
               from: op.fromLocation || (isIncoming ? 'vendor' : 'WH/Stock1'),
               to: op.toLocation || (isIncoming ? 'WH/Stock1' : 'vendor'),
-              quantity: line.quantity,
-              productName: line.productName,
-              sku: line.sku,
+              quantity: 1,
+              productName: 'General Stock',
+              sku: 'GEN',
               status: op.status === 'ready' ? 'Ready' : op.status === 'done' ? 'Done' : op.status === 'waiting' ? 'Waiting' : 'Draft',
               isIncoming,
+              operationType: op.type,
             });
           }
-        } else {
-          generatedRows.push({
-            rowId: `${op.id}_0`,
-            operationId: op.id,
-            reference: op.reference,
-            date: dateFormatted,
-            contact: op.contact || 'Azure Interior',
-            from: op.fromLocation || (isIncoming ? 'vendor' : 'WH/Stock1'),
-            to: op.toLocation || (isIncoming ? 'WH/Stock1' : 'vendor'),
-            quantity: 1,
-            productName: 'General Stock',
-            sku: 'GEN',
-            status: op.status === 'ready' ? 'Ready' : op.status === 'done' ? 'Done' : op.status === 'waiting' ? 'Waiting' : 'Draft',
-            isIncoming,
-          });
         }
-      }
 
-      setRows(generatedRows);
-      setIsLoading(false);
-    });
+        setRows(generatedRows);
+        setIsLoading(false);
+      });
+    };
+
+    loadMoveHistory();
+    window.addEventListener('stocksense:data-changed', loadMoveHistory);
+    return () => window.removeEventListener('stocksense:data-changed', loadMoveHistory);
   }, []);
 
   // Filter based on reference & contacts
@@ -190,11 +197,9 @@ export default function MoveHistoryPage() {
               </thead>
               <tbody>
                 {filteredRows.map((r) => {
-                  // Wireframe rules:
-                  // "In event should be display in green"
-                  // "Out moves should be display in rend"
-                  const rowClass = r.isIncoming ? styles.rowIn : styles.rowOut;
-                  const refClass = r.isIncoming ? styles.refCodeIn : styles.refCodeOut;
+                  const isInternal = r.operationType === 'internal';
+                  const rowClass = isInternal ? '' : r.isIncoming ? styles.rowIn : styles.rowOut;
+                  const refClass = isInternal ? '' : r.isIncoming ? styles.refCodeIn : styles.refCodeOut;
 
                   return (
                     <tr
@@ -214,8 +219,12 @@ export default function MoveHistoryPage() {
                       <td>{r.from}</td>
                       <td>{r.to}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700, fontSize: 15 }}>
-                        <span style={{ color: r.isIncoming ? '#059669' : '#DC2626' }}>
-                          {r.isIncoming ? `+${r.quantity}` : `-${r.quantity}`}
+                        <span
+                          style={{
+                            color: isInternal ? '#4F46E5' : r.isIncoming ? '#059669' : '#DC2626',
+                          }}
+                        >
+                          {isInternal ? `↔ ${r.quantity}` : r.isIncoming ? `+${r.quantity}` : `-${r.quantity}`}
                         </span>
                       </td>
                       <td>

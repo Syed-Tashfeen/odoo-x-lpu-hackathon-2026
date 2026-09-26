@@ -1,4 +1,4 @@
-import { eq, and, or, ilike, desc, sql } from "drizzle-orm";
+import { eq, and, or, ilike, desc, sql, inArray } from "drizzle-orm";
 import { db } from "../../config/db.js";
 import {
   operations,
@@ -300,8 +300,48 @@ export async function listOperations(query: {
   const total = items.length;
   const paginated = items.slice(offset, offset + limit);
 
+  const opIds = paginated.map((op) => op.id);
+  let allLines: Array<{
+    id: string;
+    operationId: string;
+    productId: string;
+    productName: string;
+    sku: string;
+    unitOfMeasure: string;
+    quantity: number;
+    quantityDone: number;
+  }> = [];
+
+  if (opIds.length > 0) {
+    allLines = await db
+      .select({
+        id: operationLines.id,
+        operationId: operationLines.operationId,
+        productId: operationLines.productId,
+        productName: products.name,
+        sku: products.sku,
+        unitOfMeasure: products.unitOfMeasure,
+        quantity: operationLines.quantity,
+        quantityDone: operationLines.quantityDone,
+      })
+      .from(operationLines)
+      .innerJoin(products, eq(products.id, operationLines.productId))
+      .where(inArray(operationLines.operationId, opIds));
+  }
+
+  const linesByOp = allLines.reduce<Record<string, typeof allLines>>((acc, line) => {
+    if (!acc[line.operationId]) acc[line.operationId] = [];
+    acc[line.operationId].push(line);
+    return acc;
+  }, {});
+
+  const dataWithLines = paginated.map((op) => ({
+    ...op,
+    lines: linesByOp[op.id] || [],
+  }));
+
   return {
-    data: paginated,
+    data: dataWithLines,
     meta: {
       total,
       page,
@@ -393,6 +433,7 @@ export async function getOperationById(id: string) {
 export async function updateDraftOperation(
   id: string,
   data: {
+    status?: "draft" | "waiting" | "ready" | "done" | "cancelled";
     sourceLocationId?: string | null;
     destLocationId?: string | null;
     partnerName?: string | null;
@@ -403,15 +444,18 @@ export async function updateDraftOperation(
 ) {
   const existing = await getOperationById(id);
 
-  if (existing.status !== "draft") {
+  if (existing.status === "done" || existing.status === "cancelled") {
     throw ApiError.badRequest(
-      `Cannot edit operation ${existing.reference}. Only operations in "draft" status can be modified.`
+      `Cannot edit operation ${existing.reference}. Completed or cancelled operations cannot be modified.`
     );
   }
 
   await db.transaction(async (tx) => {
     const updateData: Record<string, any> = { updatedAt: new Date() };
 
+    if (data.status !== undefined && data.status !== "done" && data.status !== "cancelled") {
+      updateData.status = data.status;
+    }
     if (data.sourceLocationId !== undefined) updateData.sourceLocationId = data.sourceLocationId;
     if (data.destLocationId !== undefined) updateData.destLocationId = data.destLocationId;
     if (data.partnerName !== undefined) updateData.partnerName = data.partnerName?.trim() || null;

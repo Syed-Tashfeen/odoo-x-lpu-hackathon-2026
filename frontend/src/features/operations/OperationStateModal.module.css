@@ -1,0 +1,435 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  animation: fadeIn 0.18s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal {
+  background: #FFFFFF;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 560px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #E2E8F0;
+  overflow: hidden;
+  animation: slideUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Odoo Top Accent / Progress Track */
+.progressBarTrack {
+  height: 4px;
+  background: #F1F5F9;
+  width: 100%;
+  overflow: hidden;
+}
+
+.progressBarFill {
+  height: 100%;
+  transition: width 0.35s ease-in-out;
+}
+
+.progressBarOdooPlum {
+  background: #714B67;
+}
+
+.progressBarOdooTeal {
+  background: #008784;
+}
+
+.progressBarWaiting {
+  background: #D97706;
+}
+
+/* Header */
+.header {
+  padding: 1.25rem 1.5rem 1rem;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #FFFFFF;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.typeBadge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.65rem;
+  border-radius: 4px;
+}
+
+.badgeReceipt {
+  background: #E6F4F3;
+  color: #008784;
+  border: 1px solid rgba(0, 135, 132, 0.3);
+}
+
+.badgeDelivery {
+  background: #F5EDF3;
+  color: #714B67;
+  border: 1px solid rgba(113, 75, 103, 0.25);
+}
+
+.badgeInternal {
+  background: #F5EDF3;
+  color: #714B67;
+  border: 1px solid rgba(113, 75, 103, 0.25);
+}
+
+.referenceCode {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.02em;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+}
+
+/* Odoo status badges */
+.statusIndicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.statusDraft {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.statusReady {
+  background: #F5EDF3;
+  color: #714B67;
+  border: 1px solid rgba(113, 75, 103, 0.25);
+}
+
+.statusMutating {
+  background: #F5EDF3;
+  color: #714B67;
+  border: 1px solid rgba(113, 75, 103, 0.3);
+  animation: pulse 1.4s infinite;
+}
+
+.statusDone {
+  background: #E6F4F3;
+  color: #008784;
+  border: 1px solid rgba(0, 135, 132, 0.35);
+}
+
+.statusWaiting {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+/* Stepper section */
+.stepperContainer {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.stepRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+  position: relative;
+}
+
+.stepIconWrapper {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 2px;
+  transition: all 0.25s ease;
+}
+
+.iconPending {
+  background: #F8FAFC;
+  color: #94A3B8;
+  border: 1.5px solid #CBD5E1;
+}
+
+.iconActive {
+  background: #714B67;
+  color: #FFFFFF;
+  border: none;
+  box-shadow: 0 0 0 3px rgba(113, 75, 103, 0.22);
+}
+
+.iconDone {
+  background: #008784;
+  color: #FFFFFF;
+  border: none;
+}
+
+.iconWaiting {
+  background: #D97706;
+  color: #FFFFFF;
+  border: none;
+}
+
+.stepContent {
+  flex: 1;
+}
+
+.stepTitle {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stepSubtitle {
+  font-size: 0.75rem;
+  color: #64748B;
+  margin: 0.2rem 0 0;
+}
+
+.stepConnector {
+  position: absolute;
+  left: 12px;
+  top: 28px;
+  width: 2px;
+  height: calc(100% - 2px);
+  background: #E2E8F0;
+}
+
+.connectorDone {
+  background: #008784;
+}
+
+/* Inventory Impact box */
+.impactBox {
+  margin: 0 1.5rem 1.25rem;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+}
+
+.impactHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #475569;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.5rem;
+}
+
+.impactItemsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.impactItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8125rem;
+}
+
+.impactItemLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.skuPill {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  background: #FFFFFF;
+  color: #334155;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  border: 1px solid #CBD5E1;
+  font-weight: 600;
+}
+
+.productName {
+  font-weight: 500;
+  color: #1E293B;
+  max-width: 250px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deltaBadgePositive {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: #008784;
+  background: #E6F4F3;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 135, 132, 0.3);
+}
+
+.deltaBadgeNegative {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: #DC2626;
+  background: #FEF2F2;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid #FECACA;
+}
+
+.deltaBadgeTransfer {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: #714B67;
+  background: #F5EDF3;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  border: 1px solid rgba(113, 75, 103, 0.25);
+}
+
+.alertBox {
+  margin: 0 1.5rem 1.25rem;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 6px;
+  padding: 0.875rem 1rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  color: #92400E;
+  font-size: 0.8125rem;
+}
+
+/* Footer matching Odoo standard */
+.footer {
+  padding: 0.875rem 1.5rem;
+  background: #F8FAFC;
+  border-top: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
+.closeBtn {
+  padding: 0.45rem 1.15rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.closeBtn:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.primaryBtn {
+  padding: 0.45rem 1.15rem;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background-color: var(--color-primary, #714B67);
+  color: #FFFFFF;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 1px 2px rgba(113, 75, 103, 0.2);
+}
+
+.primaryBtn:hover {
+  background-color: var(--color-primary-hover, #5B3C53);
+}
+
+.spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(113, 75, 103, 0.25);
+  border-top-color: #714B67;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

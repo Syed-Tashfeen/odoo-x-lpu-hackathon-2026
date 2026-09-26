@@ -244,8 +244,11 @@ export function getStoredOperations(): Operation[] {
   }
 }
 
-export function saveStoredOperations(ops: Operation[]): void {
+export function saveStoredOperations(ops: Operation[], silent = false): void {
   localStorage.setItem(STORAGE_KEY_OPERATIONS, JSON.stringify(ops));
+  if (!silent && typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('stocksense:data-changed'));
+  }
 }
 
 export const operationsService = {
@@ -272,18 +275,27 @@ export const operationsService = {
           type: o.type,
           status: o.status,
           warehouseCode: 'WH',
-          fromLocation: o.sourceLocation?.name || 'vendor',
-          toLocation: o.destLocation?.name || 'WH/Stock1',
+          fromLocation: o.sourceLocation?.name || o.sourceLocationName || (o.type === 'receipt' ? 'vendor' : 'WH/Stock1'),
+          toLocation: o.destLocation?.name || o.destLocationName || (o.type === 'delivery' ? 'Customer Location' : 'WH/Stock1'),
           contact: o.partnerName || 'Unknown Partner',
-          responsible: o.createdBy?.name || 'Staff',
+          responsible: o.createdByName || o.createdBy?.name || 'Staff',
           scheduledDate: o.scheduledDate ? o.scheduledDate.substring(0, 10) : new Date().toISOString().substring(0, 10),
-          completedDate: o.completedDate,
+          completedDate: o.completedDate ? o.completedDate.substring(0, 10) : null,
           notes: o.notes,
-          lines: o.lines || [],
+          lines: Array.isArray(o.lines) && o.lines.length > 0
+            ? o.lines.map((l: any) => ({
+                id: l.id,
+                productId: l.productId,
+                productName: l.productName || l.product?.name || 'Product',
+                sku: l.sku || l.product?.sku || 'SKU',
+                quantity: l.quantity,
+                quantityDone: l.quantityDone || 0,
+              }))
+            : [],
           createdAt: o.createdAt || new Date().toISOString(),
         }));
         if (serverOps.length > 0) {
-          saveStoredOperations(serverOps);
+          saveStoredOperations(serverOps, true);
           list = serverOps;
         }
       }
@@ -319,40 +331,49 @@ export const operationsService = {
   async getOperationById(idOrRef: string): Promise<Operation | null> {
     const list = getStoredOperations();
     const found = list.find((o) => o.id === idOrRef || o.reference === idOrRef);
-    if (found) return found;
+    if (found && found.lines && found.lines.length > 0) return found;
 
     try {
       const res = await api.get(`/operations/${idOrRef}`);
       if (res.data?.data) {
         const o = res.data.data;
-        return {
+        const opResult: Operation = {
           id: o.id,
           reference: o.reference,
           type: o.type,
           status: o.status,
           warehouseCode: 'WH',
-          fromLocation: o.sourceLocation?.name || 'vendor',
-          toLocation: o.destLocation?.name || 'WH/Stock1',
-          contact: o.partnerName || 'Unknown',
-          responsible: o.createdBy?.name || 'Staff',
+          fromLocation: o.sourceLocation?.name || o.sourceLocationName || (o.type === 'receipt' ? 'vendor' : 'WH/Stock1'),
+          toLocation: o.destLocation?.name || o.destLocationName || (o.type === 'delivery' ? 'Customer Location' : 'WH/Stock1'),
+          contact: o.partnerName || 'Unknown Partner',
+          responsible: o.createdByName || o.createdBy?.name || 'Staff',
           scheduledDate: o.scheduledDate ? o.scheduledDate.substring(0, 10) : new Date().toISOString().substring(0, 10),
-          completedDate: o.completedDate,
+          completedDate: o.completedDate ? o.completedDate.substring(0, 10) : null,
           notes: o.notes,
           lines: (o.lines || []).map((l: any) => ({
             id: l.id,
             productId: l.productId,
-            productName: l.product?.name || 'Product',
-            sku: l.product?.sku || 'SKU',
+            productName: l.productName || l.product?.name || 'Product',
+            sku: l.sku || l.product?.sku || 'SKU',
             quantity: l.quantity,
             quantityDone: l.quantityDone || 0,
           })),
-          createdAt: o.createdAt,
+          createdAt: o.createdAt || new Date().toISOString(),
         };
+
+        const idx = list.findIndex((x) => x.id === o.id || x.reference === o.reference);
+        if (idx !== -1) {
+          list[idx] = opResult;
+        } else {
+          list.push(opResult);
+        }
+        saveStoredOperations(list, true);
+        return opResult;
       }
     } catch {
       // Fallback
     }
-    return null;
+    return found || null;
   },
 
   /**
@@ -392,11 +413,11 @@ export const operationsService = {
     const products = await productsService.getProducts();
 
     const fullLines: OperationLine[] = data.lines.map((item, idx) => {
-      const matched = products.items.find((p) => p.id === item.productId);
+      const matched = products.items.find((p) => p.id === item.productId || p.sku === item.productId);
       return {
         id: `line_${Date.now()}_${idx}`,
-        productId: item.productId,
-        productName: matched?.name || 'Unknown Product',
+        productId: matched ? matched.id : item.productId,
+        productName: matched?.name || 'Product',
         sku: matched?.sku || 'SKU',
         quantity: item.quantity,
         quantityDone: 0,
@@ -410,8 +431,8 @@ export const operationsService = {
       status: 'draft',
       warehouseCode: 'WH',
       fromLocation: data.fromLocation || (data.type === 'receipt' ? 'vendor' : 'WH/Stock1'),
-      toLocation: data.toLocation || (data.type === 'delivery' ? 'Customer Location' : 'WH/Stock1'),
-      contact: data.contact || 'Azure Interior',
+      toLocation: data.toLocation || (data.type === 'delivery' ? 'Customer Location' : data.type === 'internal' ? 'WH/Stock2' : 'WH/Stock1'),
+      contact: data.contact || (data.type === 'internal' ? 'Internal Assembly' : 'Azure Interior'),
       responsible: data.responsible,
       scheduledDate: data.scheduledDate || new Date().toISOString().substring(0, 10),
       notes: data.notes,
@@ -425,6 +446,8 @@ export const operationsService = {
     try {
       const res = await api.post('/operations', {
         type: newOp.type,
+        sourceLocationId: newOp.fromLocation,
+        destLocationId: newOp.toLocation,
         partnerName: newOp.contact,
         scheduledDate: newOp.scheduledDate,
         notes: newOp.notes,
@@ -433,9 +456,23 @@ export const operationsService = {
       if (res.data?.data) {
         newOp.id = res.data.data.id;
         newOp.reference = res.data.data.reference || newOp.reference;
-        list[0].id = res.data.data.id;
-        list[0].reference = newOp.reference;
-        saveStoredOperations(list);
+        if (Array.isArray(res.data.data.lines) && res.data.data.lines.length > 0) {
+          newOp.lines = res.data.data.lines.map((l: any) => ({
+            id: l.id,
+            productId: l.productId,
+            productName: l.productName || l.product?.name || newOp.lines.find((x) => x.productId === l.productId)?.productName || 'Product',
+            sku: l.sku || l.product?.sku || newOp.lines.find((x) => x.productId === l.productId)?.sku || 'SKU',
+            quantity: l.quantity,
+            quantityDone: l.quantityDone || 0,
+          }));
+        }
+        const idx = list.findIndex((o) => o.id === newOp.id || o.reference === newOp.reference);
+        if (idx !== -1) {
+          list[idx] = { ...newOp };
+        } else {
+          list[0] = { ...newOp };
+        }
+        saveStoredOperations(list, true);
       }
     } catch {
       // Offline fallback
@@ -450,11 +487,26 @@ export const operationsService = {
   async markAsReady(id: string): Promise<Operation> {
     const list = getStoredOperations();
     const index = list.findIndex((o) => o.id === id);
-    if (index === -1) throw new Error('Operation not found');
+    if (index !== -1) {
+      list[index].status = 'ready';
+      list[index].updatedAt = new Date().toISOString();
+      saveStoredOperations(list);
+    }
 
-    list[index].status = 'ready';
-    list[index].updatedAt = new Date().toISOString();
-    saveStoredOperations(list);
+    try {
+      const res = await api.patch(`/operations/${id}`, { status: 'ready' });
+      if (res.data?.data) {
+        if (index !== -1) {
+          list[index].status = res.data.data.status || 'ready';
+          saveStoredOperations(list, true);
+          return list[index];
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+
+    if (index === -1) throw new Error('Operation not found');
     return list[index];
   },
 
@@ -464,24 +516,64 @@ export const operationsService = {
   async markAsWaiting(id: string): Promise<Operation> {
     const list = getStoredOperations();
     const index = list.findIndex((o) => o.id === id);
-    if (index === -1) throw new Error('Operation not found');
+    if (index !== -1) {
+      list[index].status = 'waiting';
+      list[index].updatedAt = new Date().toISOString();
+      saveStoredOperations(list);
+    }
 
-    list[index].status = 'waiting';
-    list[index].updatedAt = new Date().toISOString();
-    saveStoredOperations(list);
+    try {
+      const res = await api.patch(`/operations/${id}`, { status: 'waiting' });
+      if (res.data?.data) {
+        if (index !== -1) {
+          list[index].status = res.data.data.status || 'waiting';
+          saveStoredOperations(list, true);
+          return list[index];
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+
+    if (index === -1) throw new Error('Operation not found');
     return list[index];
   },
 
   /**
    * Transition Ready -> Done (Wireframe: "onclick, Validate move to Done")
-   * This also mutates the actual stock for the involved products!
+   * This automatically mutates the actual stock for the involved products!
    */
   async validateOperation(id: string): Promise<Operation> {
     const list = getStoredOperations();
-    const index = list.findIndex((o) => o.id === id);
-    if (index === -1) throw new Error('Operation not found');
+    let index = list.findIndex((o) => o.id === id);
+    if (index === -1) {
+      // Try to fetch from server first if not found locally
+      const fetched = await this.getOperationById(id);
+      if (!fetched) throw new Error('Operation not found');
+      index = list.findIndex((o) => o.id === id);
+    }
 
     const op = list[index];
+
+    // If lines are empty locally, attempt to fetch lines from server
+    if (!op.lines || op.lines.length === 0) {
+      try {
+        const fetched = await api.get(`/operations/${id}`);
+        if (fetched.data?.data?.lines && fetched.data.data.lines.length > 0) {
+          op.lines = fetched.data.data.lines.map((l: any) => ({
+            id: l.id,
+            productId: l.productId,
+            productName: l.productName || l.product?.name || 'Product',
+            sku: l.sku || l.product?.sku || 'SKU',
+            quantity: l.quantity,
+            quantityDone: l.quantityDone || 0,
+          }));
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
     op.status = 'done';
     op.completedDate = new Date().toISOString().substring(0, 10);
     op.updatedAt = new Date().toISOString();
@@ -491,49 +583,95 @@ export const operationsService = {
 
     // Mutate product stock levels
     const allProducts = await productsService.getProducts();
+
     for (const line of op.lines) {
-      const prod = allProducts.items.find((p) => p.id === line.productId);
+      const prod = allProducts.items.find(
+        (p) => p.id === line.productId || (line.sku && p.sku.toLowerCase() === line.sku.toLowerCase())
+      );
+
       if (prod) {
+        if (!Array.isArray(prod.stockByLocation)) {
+          prod.stockByLocation = [];
+        }
+
         if (op.type === 'receipt') {
-          // Add to stock
-          const newTotal = prod.totalStock + line.quantity;
-          const loc = prod.stockByLocation.find((s) => s.locationName === op.toLocation) || prod.stockByLocation[0];
-          if (loc) loc.quantity += line.quantity;
+          // Inbound goods: increase warehouse stock
+          const destLocName = op.toLocation || 'WH/Stock1';
+          let loc = prod.stockByLocation.find(
+            (s) => s.locationName === destLocName || s.locationId === destLocName
+          );
+          if (!loc) {
+            loc = { locationId: `loc_${Date.now()}`, locationName: destLocName, quantity: 0 };
+            prod.stockByLocation.push(loc);
+          }
+          loc.quantity += line.quantity;
+          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
+
           await productsService.updateProduct(prod.id, {
             totalStock: newTotal,
             stockByLocation: [...prod.stockByLocation],
           });
         } else if (op.type === 'delivery') {
-          // Deduct from stock
-          const newTotal = Math.max(0, prod.totalStock - line.quantity);
-          const loc = prod.stockByLocation.find((s) => s.locationName === op.fromLocation) || prod.stockByLocation[0];
-          if (loc) loc.quantity = Math.max(0, loc.quantity - line.quantity);
+          // Outbound goods: decrease warehouse stock
+          const sourceLocName = op.fromLocation || 'WH/Stock1';
+          let loc = prod.stockByLocation.find(
+            (s) => s.locationName === sourceLocName || s.locationId === sourceLocName
+          ) || prod.stockByLocation[0];
+
+          if (loc) {
+            loc.quantity = Math.max(0, loc.quantity - line.quantity);
+          }
+          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
+
           await productsService.updateProduct(prod.id, {
             totalStock: newTotal,
             stockByLocation: [...prod.stockByLocation],
           });
         } else if (op.type === 'internal') {
-          // Internal transfer between locations
-          const fromLoc = prod.stockByLocation.find((s) => s.locationName === op.fromLocation);
-          let toLoc = prod.stockByLocation.find((s) => s.locationName === op.toLocation);
-          if (fromLoc) fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
-          if (!toLoc && op.toLocation) {
-            toLoc = { locationId: `loc_${Date.now()}`, locationName: op.toLocation, quantity: 0 };
-            prod.stockByLocation.push(toLoc);
+          // Internal transfer: move stock between locations inside the company
+          const fromLocName = op.fromLocation || 'WH/Stock1';
+          const toLocName = op.toLocation || 'WH/Stock2';
+
+          if (fromLocName !== toLocName) {
+            let fromLoc = prod.stockByLocation.find(
+              (s) => s.locationName === fromLocName || s.locationId === fromLocName
+            ) || prod.stockByLocation[0];
+
+            let toLoc = prod.stockByLocation.find(
+              (s) => s.locationName === toLocName || s.locationId === toLocName
+            );
+
+            if (!toLoc) {
+              toLoc = { locationId: `loc_${Date.now()}`, locationName: toLocName, quantity: 0 };
+              prod.stockByLocation.push(toLoc);
+            }
+
+            if (fromLoc && fromLoc !== toLoc) {
+              fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
+              toLoc.quantity += line.quantity;
+            }
+
+            const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
+
+            await productsService.updateProduct(prod.id, {
+              totalStock: newTotal,
+              stockByLocation: [...prod.stockByLocation],
+            });
           }
-          if (toLoc) toLoc.quantity += line.quantity;
-          await productsService.updateProduct(prod.id, {
-            stockByLocation: [...prod.stockByLocation],
-          });
         } else if (op.type === 'adjustment') {
           // Physical inventory adjustment: line.quantity is counted quantity
-          let loc = prod.stockByLocation.find((s) => s.locationName === op.toLocation);
-          if (!loc && op.toLocation) {
-            loc = { locationId: `loc_${Date.now()}`, locationName: op.toLocation, quantity: 0 };
+          const targetLocName = op.toLocation || op.fromLocation || 'WH/Stock1';
+          let loc = prod.stockByLocation.find(
+            (s) => s.locationName === targetLocName || s.locationId === targetLocName
+          );
+
+          if (!loc) {
+            loc = { locationId: `loc_${Date.now()}`, locationName: targetLocName, quantity: 0 };
             prod.stockByLocation.push(loc);
           }
-          if (loc) loc.quantity = line.quantity;
-          const newTotal = prod.stockByLocation.reduce((acc, s) => acc + s.quantity, 0);
+          loc.quantity = line.quantity;
+          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
+
           await productsService.updateProduct(prod.id, {
             totalStock: newTotal,
             stockByLocation: [...prod.stockByLocation],
@@ -544,8 +682,18 @@ export const operationsService = {
 
     saveStoredOperations(list);
 
+    // Sync with backend API
     try {
-      await api.post(`/operations/${id}/validate`);
+      const res = await api.post(`/operations/${id}/validate`);
+      if (res.data?.data) {
+        op.status = res.data.data.status || 'done';
+        if (res.data.data.completedDate) {
+          op.completedDate = res.data.data.completedDate.substring(0, 10);
+        }
+        saveStoredOperations(list, true);
+      }
+      // Re-fetch products from server to ensure database sync (silent – no event loop)
+      await productsService.getProducts();
     } catch {
       // Offline fallback
     }

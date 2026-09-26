@@ -6,8 +6,10 @@ import {
   operationsService,
   type Operation,
   type OperationType,
+  type OperationStatus,
 } from '../../lib/operationsService';
 import { productsService, type Product } from '../../lib/productsService';
+import OperationStateModal, { type StateModalStep } from './OperationStateModal';
 import styles from './OperationsPage.module.css';
 
 export default function OperationsPage() {
@@ -53,6 +55,23 @@ export default function OperationsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Visual Backend State Transition Modal state
+  const [isStateModalOpen, setIsStateModalOpen] = useState(false);
+  const [stateModalStep, setStateModalStep] = useState<StateModalStep>('initializing');
+  const [stateModalReference, setStateModalReference] = useState('');
+  const [stateModalLocation, setStateModalLocation] = useState('');
+  const [stateModalLines, setStateModalLines] = useState<Array<{ productName: string; sku: string; quantity: number }>>([]);
+  const [stateModalStatusBadge, setStateModalStatusBadge] = useState<OperationStatus>('draft');
+  const [stateModalWaitingReason, setStateModalWaitingReason] = useState<string | undefined>();
+  const [stateModalErrorMessage, setStateModalErrorMessage] = useState<string | undefined>();
+
+  // Button loading states
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
+  const [actionLoadingText, setActionLoadingText] = useState<string>('');
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   // Form state for creating/editing operation
   const [formFields, setFormFields] = useState({
     receiveFrom: 'Azure Interior',
@@ -71,10 +90,10 @@ export default function OperationsPage() {
       : null;
 
     setFormFields({
-      receiveFrom: 'Azure Interior',
+      receiveFrom: opType === 'internal' ? 'Production Line' : 'Azure Interior',
       scheduleDate: new Date().toISOString().substring(0, 10),
       responsible: user?.name || 'Syed Tashfeen',
-      toLocation: opType === 'receipt' ? 'WH/Stock1' : 'Customer Location',
+      toLocation: opType === 'receipt' ? 'WH/Stock1' : opType === 'internal' ? 'WH/Production' : 'Customer Location',
       fromLocation: opType === 'receipt' ? 'vendor' : 'WH/Stock1',
       lines: [{ productId: matched ? matched.id : defaultProdId, quantity: 6 }],
     });
@@ -114,6 +133,11 @@ export default function OperationsPage() {
 
   useEffect(() => {
     loadOperations();
+    const handleDataChanged = () => {
+      loadOperations();
+    };
+    window.addEventListener('stocksense:data-changed', handleDataChanged);
+    return () => window.removeEventListener('stocksense:data-changed', handleDataChanged);
   }, [opType, search]);
 
   const handleSelectOperation = (op: Operation) => {
@@ -129,14 +153,43 @@ export default function OperationsPage() {
     loadOperations();
   };
 
-  const handleSaveNewOperation = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleModalConfirmDone = () => {
+    setIsStateModalOpen(false);
+    setIsValidating(false);
+    setIsSavingDraft(false);
+    setActionLoadingText('');
+  };
+
+  const handleSaveNewOperation = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!formFields.lines || formFields.lines.length === 0 || !formFields.lines[0].productId) {
       toast.error('Please add at least one product line');
       return;
     }
 
+    const previewLines = formFields.lines.map((l) => {
+      const prod = products.find((p) => p.id === l.productId);
+      return {
+        productName: prod?.name || 'Product',
+        sku: prod?.sku || 'SKU',
+        quantity: Number(l.quantity) || 1,
+      };
+    });
+    const targetLoc = opType === 'receipt' ? formFields.toLocation : formFields.fromLocation;
+
+    setIsSavingDraft(true);
+    setActionLoadingText('Creating Draft Order...');
+    setStateModalReference('');
+    setStateModalLocation(targetLoc || 'WH/Stock1');
+    setStateModalLines(previewLines);
+    setStateModalWaitingReason(undefined);
+    setStateModalErrorMessage(undefined);
+    setStateModalStatusBadge('draft');
+    setStateModalStep('initializing');
+    setIsStateModalOpen(true);
+
     try {
+      await sleep(400); // Visual step cadence
       const created = await operationsService.createOperation({
         type: opType,
         fromLocation: formFields.fromLocation,
@@ -146,13 +199,127 @@ export default function OperationsPage() {
         scheduledDate: formFields.scheduleDate,
         lines: formFields.lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) || 1 })),
       });
-      toast.success(`Created ${created.reference}`);
+      setStateModalReference(created.reference);
+      setStateModalStep('draft');
+      setStateModalStatusBadge('draft');
+      setActionLoadingText(`Draft ${created.reference} Saved!`);
+      toast.success(`Created draft ${created.reference}`);
       setActiveOperation(created);
       setIsEditing(false);
       setSearchParams({ id: created.id });
       loadOperations();
+      return created;
     } catch (err: any) {
+      setStateModalStep('error');
+      setStateModalErrorMessage(err.message || 'Failed to save operation');
       toast.error(err.message || 'Failed to save operation');
+      return null;
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  // Direct 1-click Save and Validate with full visual state pipeline
+  const handleSaveAndValidate = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!formFields.lines || formFields.lines.length === 0 || !formFields.lines[0].productId) {
+      toast.error('Please add at least one product line');
+      return;
+    }
+
+    const previewLines = formFields.lines.map((l) => {
+      const prod = products.find((p) => p.id === l.productId);
+      return {
+        productName: prod?.name || 'Product',
+        sku: prod?.sku || 'SKU',
+        quantity: Number(l.quantity) || 1,
+      };
+    });
+    const targetLoc = opType === 'receipt' ? formFields.toLocation : formFields.fromLocation;
+
+    setIsValidating(true);
+    setActionLoadingText('1. Creating Draft Order...');
+    setStateModalReference('');
+    setStateModalLocation(targetLoc || 'WH/Stock1');
+    setStateModalLines(previewLines);
+    setStateModalWaitingReason(undefined);
+    setStateModalErrorMessage(undefined);
+    setStateModalStatusBadge('draft');
+    setStateModalStep('initializing');
+    setIsStateModalOpen(true);
+
+    try {
+      // Step 1: Create operation in draft state
+      await sleep(400); // Visual step cadence
+      const created = await operationsService.createOperation({
+        type: opType,
+        fromLocation: formFields.fromLocation,
+        toLocation: formFields.toLocation,
+        contact: formFields.receiveFrom,
+        responsible: formFields.responsible,
+        scheduledDate: formFields.scheduleDate,
+        lines: formFields.lines.map((l) => ({ productId: l.productId, quantity: Number(l.quantity) || 1 })),
+      });
+      setStateModalReference(created.reference);
+      setStateModalStep('draft');
+      setActionLoadingText('2. Checking Stock Availability...');
+
+      // Step 2: Check stock availability & reserve
+      await sleep(500); // Visual step cadence
+      setStateModalStep('checking');
+
+      let shortageInfo: string | null = null;
+      if (opType === 'delivery' || opType === 'internal') {
+        for (const line of created.lines) {
+          const prod = products.find((p) => p.id === line.productId || p.sku === line.sku);
+          const available = prod ? prod.totalStock : 0;
+          if (available < line.quantity) {
+            shortageInfo = `Insufficient stock for ${line.productName} (SKU: ${line.sku}). Available: ${available}, Required: ${line.quantity}.`;
+            break;
+          }
+        }
+      }
+
+      if (shortageInfo) {
+        const updated = await operationsService.markAsWaiting(created.id);
+        setStateModalStep('waiting');
+        setStateModalStatusBadge('waiting');
+        setStateModalWaitingReason(shortageInfo);
+        setActiveOperation(updated);
+        setIsEditing(false);
+        setSearchParams({ id: updated.id });
+        toast.error(`Out of stock! ${created.reference} marked as Waiting.`);
+        loadOperations();
+        return;
+      }
+
+      // Mark as Ready
+      const readyOp = await operationsService.markAsReady(created.id);
+      setStateModalStep('ready');
+      setStateModalStatusBadge('ready');
+      setActionLoadingText('3. Mutating Stock Ledger...');
+
+      // Step 3: Atomic Stock Mutation & Validation
+      await sleep(550); // Visual step cadence
+      setStateModalStep('mutating');
+      const validated = await operationsService.validateOperation(readyOp.id);
+
+      // Step 4: Finalize
+      await sleep(450); // Visual step cadence
+      setStateModalStep('done');
+      setStateModalStatusBadge('done');
+      setActionLoadingText('Validated & Stock Updated!');
+      toast.success(`Created & Validated ${validated.reference}! Stock updated automatically.`);
+      setActiveOperation(validated);
+      setIsEditing(false);
+      setSearchParams({ id: validated.id });
+      loadOperations();
+    } catch (err: any) {
+      setStateModalStep('error');
+      setStateModalErrorMessage(err.message || 'Failed to save & validate operation');
+      toast.error(err.message || 'Failed to save & validate operation');
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -162,7 +329,15 @@ export default function OperationsPage() {
     // Check if any product has insufficient stock for deliveries/transfers
     const outItem = activeOperation.lines.find((line) => {
       const p = products.find((prod) => prod.id === line.productId || prod.sku === line.sku);
-      return p && p.totalStock < line.quantity;
+      if (!p) return false;
+      if (activeOperation.type === 'internal') {
+        const loc = p.stockByLocation?.find(
+          (s) => s.locationName === activeOperation.fromLocation || s.locationId === activeOperation.fromLocation
+        );
+        const available = loc !== undefined ? loc.quantity : p.totalStock;
+        return available < line.quantity;
+      }
+      return p.totalStock < line.quantity;
     });
 
     try {
@@ -173,7 +348,11 @@ export default function OperationsPage() {
       } else {
         const updated = await operationsService.markAsReady(activeOperation.id);
         setActiveOperation(updated);
-        toast.success('Stock reserved! Status updated to Ready.');
+        toast.success(
+          activeOperation.type === 'receipt'
+            ? 'Receipt marked as Ready for receiving!'
+            : 'Stock reserved! Status updated to Ready.'
+        );
       }
       loadOperations();
     } catch {
@@ -181,16 +360,90 @@ export default function OperationsPage() {
     }
   };
 
-  // Wireframe Workflow: Ready -> Done (Validate button)
+  // Validate operation (Stock decreases for delivery, increases for receipts, transfers for internal)
   const handleValidate = async () => {
     if (!activeOperation) return;
+
+    const op = activeOperation;
+    const previewLines = op.lines.map((l) => ({
+      productName: l.productName,
+      sku: l.sku,
+      quantity: l.quantity,
+    }));
+    const targetLoc = op.type === 'receipt' ? op.toLocation : op.fromLocation;
+
+    setIsValidating(true);
+    setActionLoadingText('Checking Stock Availability...');
+    setStateModalReference(op.reference);
+    setStateModalLocation(targetLoc || 'WH/Stock1');
+    setStateModalLines(previewLines);
+    setStateModalWaitingReason(undefined);
+    setStateModalErrorMessage(undefined);
+    setStateModalStatusBadge(op.status);
+    setStateModalStep('checking');
+    setIsStateModalOpen(true);
+
     try {
-      const updated = await operationsService.validateOperation(activeOperation.id);
+      await sleep(400); // Visual observation
+      // For deliveries/transfers, ensure stock is available before validating
+      if (op.type === 'delivery' || op.type === 'internal') {
+        let shortageInfo: string | null = null;
+        for (const line of op.lines) {
+          const p = products.find((prod) => prod.id === line.productId || prod.sku === line.sku);
+          if (p) {
+            let available = p.totalStock;
+            if (op.type === 'internal') {
+              const loc = p.stockByLocation?.find(
+                (s) => s.locationName === op.fromLocation || s.locationId === op.fromLocation
+              );
+              available = loc !== undefined ? loc.quantity : p.totalStock;
+            }
+            if (available < line.quantity) {
+              shortageInfo = `Insufficient stock for ${line.productName} (SKU: ${line.sku}). Available: ${available}, Required: ${line.quantity}.`;
+              break;
+            }
+          }
+        }
+
+        if (shortageInfo) {
+          const updated = await operationsService.markAsWaiting(op.id);
+          setStateModalStep('waiting');
+          setStateModalStatusBadge('waiting');
+          setStateModalWaitingReason(shortageInfo);
+          setActiveOperation(updated);
+          toast.error(`Cannot validate: Insufficient stock! Marked as Waiting.`);
+          loadOperations();
+          return;
+        }
+      }
+
+      // Mark as Ready if not ready
+      if (op.status !== 'ready') {
+        await operationsService.markAsReady(op.id);
+        setStateModalStep('ready');
+        setStateModalStatusBadge('ready');
+      }
+
+      // Step 3: Mutating
+      setActionLoadingText('Mutating Stock Levels & Ledger...');
+      await sleep(550);
+      setStateModalStep('mutating');
+      const updated = await operationsService.validateOperation(op.id);
+
+      // Step 4: Done
+      await sleep(450);
+      setStateModalStep('done');
+      setStateModalStatusBadge('done');
+      setActionLoadingText('Validated & Stock Updated!');
       setActiveOperation(updated);
-      toast.success(`Validated ${updated.reference}! Stock updated.`);
+      toast.success(`Validated ${updated.reference}! Stock automatically updated.`);
       loadOperations();
-    } catch {
-      toast.error('Failed to validate operation');
+    } catch (err: any) {
+      setStateModalStep('error');
+      setStateModalErrorMessage(err.message || 'Failed to validate operation');
+      toast.error(err.message || 'Failed to validate operation');
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -241,6 +494,14 @@ export default function OperationsPage() {
       if (opType !== 'delivery' && opType !== 'internal') return false;
       const prod = products.find((p) => p.id === productId || p.sku === sku);
       if (!prod) return false;
+      if (opType === 'internal') {
+        const sourceLoc = isNew ? formFields.fromLocation : (op?.fromLocation || 'WH/Stock1');
+        const loc = prod.stockByLocation?.find(
+          (s) => s.locationName === sourceLoc || s.locationId === sourceLoc
+        );
+        const available = loc !== undefined ? loc.quantity : prod.totalStock;
+        return available < qty;
+      }
       return prod.totalStock < qty;
     };
 
@@ -273,42 +534,59 @@ export default function OperationsPage() {
                 New
               </button>
 
-              {/* Action Buttons: To DO / Check Availability in Draft/Waiting, Validate in Ready */}
-              {isNew ? (
-                <button
-                  type="button"
-                  className={styles.actionBtnPrimary}
-                  onClick={handleSaveNewOperation}
-                >
-                  Save as Draft
-                </button>
-              ) : currentStatus === 'draft' || currentStatus === 'waiting' ? (
-                <button
-                  type="button"
-                  className={styles.actionBtnPrimary}
-                  onClick={handleCheckAvailabilityOrReady}
-                  title="Check product stock availability"
-                >
-                  {currentStatus === 'waiting' ? 'Re-check Availability' : 'To DO / Check Availability'}
-                </button>
-              ) : currentStatus === 'ready' ? (
-                <button
-                  type="button"
-                  className={styles.actionBtnPrimary}
-                  onClick={handleValidate}
-                >
-                  Validate
-                </button>
+              {/* Action Buttons for existing operations: Validate, Mark as Ready / Check Availability */}
+              {!isNew && currentStatus !== 'done' && currentStatus !== 'cancelled' ? (
+                <>
+                  <button
+                    type="button"
+                    className={`${styles.actionBtnPrimary} ${isValidating ? styles.actionBtnLoading : ''}`}
+                    style={{ background: '#15803D' }}
+                    onClick={handleValidate}
+                    disabled={isValidating}
+                    title="Validate operation and automatically update stock"
+                  >
+                    {isValidating ? (
+                      <>
+                        <span className={styles.buttonSpinner} />
+                        <span>{actionLoadingText || 'Validating...'}</span>
+                      </>
+                    ) : (
+                      'Validate'
+                    )}
+                  </button>
+
+                  {opType === 'receipt' && currentStatus === 'draft' ? (
+                    <button
+                      type="button"
+                      className={styles.actionBtnSecondary}
+                      onClick={handleCheckAvailabilityOrReady}
+                      title="Move receipt from Draft to Ready"
+                    >
+                      Mark as Ready
+                    </button>
+                  ) : (opType === 'delivery' || opType === 'internal') ? (
+                    <button
+                      type="button"
+                      className={styles.actionBtnSecondary}
+                      onClick={handleCheckAvailabilityOrReady}
+                      title="Check product stock availability"
+                    >
+                      {currentStatus === 'waiting' ? 'Re-check Availability' : 'Check Availability'}
+                    </button>
+                  ) : null}
+                </>
               ) : null}
 
               {/* [Print] button */}
-              <button
-                type="button"
-                className={styles.actionBtnSecondary}
-                onClick={handlePrint}
-              >
-                Print
-              </button>
+              {!isNew && (
+                <button
+                  type="button"
+                  className={styles.actionBtnSecondary}
+                  onClick={handlePrint}
+                >
+                  Print
+                </button>
+              )}
 
               {/* [Cancel] button */}
               {!isNew && currentStatus !== 'cancelled' && currentStatus !== 'done' && (
@@ -377,19 +655,65 @@ export default function OperationsPage() {
           {isNew ? (
             <form onSubmit={handleSaveNewOperation} className={styles.detailContainer} style={{ border: 'none', padding: 0 }}>
               <div className={styles.formGrid}>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>
-                    {opType === 'delivery' ? 'Delivery Address' : 'Receive From (Contact)'}
-                  </label>
-                  <input
-                    type="text"
-                    className={styles.fieldInput}
-                    value={formFields.receiveFrom}
-                    onChange={(e) => setFormFields({ ...formFields, receiveFrom: e.target.value })}
-                    placeholder={opType === 'delivery' ? 'e.g. Azure Interior, 45 Main St' : 'e.g. Azure Interior'}
-                    required
-                  />
-                </div>
+                {opType === 'internal' ? (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Source Location (From)</label>
+                      <select
+                        className={styles.fieldInput}
+                        value={formFields.fromLocation}
+                        onChange={(e) => setFormFields({ ...formFields, fromLocation: e.target.value })}
+                        required
+                      >
+                        <option value="WH/Stock1">WH/Stock1 (Primary Storage)</option>
+                        <option value="WH/Stock2">WH/Stock2 (Secondary Storage)</option>
+                        <option value="WH/Rack A">WH/Rack A (Heavy Pallet Racks)</option>
+                        <option value="WH/Production">WH/Production (Assembly Floor)</option>
+                      </select>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Destination Location (To)</label>
+                      <select
+                        className={styles.fieldInput}
+                        value={formFields.toLocation}
+                        onChange={(e) => setFormFields({ ...formFields, toLocation: e.target.value })}
+                        required
+                      >
+                        <option value="WH/Production">WH/Production (Assembly Floor)</option>
+                        <option value="WH/Stock2">WH/Stock2 (Secondary Storage)</option>
+                        <option value="WH/Stock1">WH/Stock1 (Primary Storage)</option>
+                        <option value="WH/Rack A">WH/Rack A (Heavy Pallet Racks)</option>
+                      </select>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Transfer Purpose / Department</label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        value={formFields.receiveFrom}
+                        onChange={(e) => setFormFields({ ...formFields, receiveFrom: e.target.value })}
+                        placeholder="e.g. Main Store → Production Floor"
+                        required
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>
+                      {opType === 'delivery' ? 'Delivery Address' : 'Receive From (Contact)'}
+                    </label>
+                    <input
+                      type="text"
+                      className={styles.fieldInput}
+                      value={formFields.receiveFrom}
+                      onChange={(e) => setFormFields({ ...formFields, receiveFrom: e.target.value })}
+                      placeholder={opType === 'delivery' ? 'e.g. Azure Interior, 45 Main St' : 'e.g. Azure Interior'}
+                      required
+                    />
+                  </div>
+                )}
 
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel}>Schedule Date</label>
@@ -526,9 +850,36 @@ export default function OperationsPage() {
                 </button>
               </div>
 
-              <div style={{ marginTop: 20 }}>
-                <button type="submit" className={styles.actionBtnPrimary}>
-                  Save & Confirm {singleTitle}
+              <div style={{ marginTop: 20, display: 'flex', gap: 12 }}>
+                <button
+                  type="submit"
+                  className={`${styles.actionBtnPrimary} ${isSavingDraft ? styles.actionBtnLoading : ''}`}
+                  disabled={isSavingDraft || isValidating}
+                >
+                  {isSavingDraft ? (
+                    <>
+                      <span className={styles.buttonSpinner} />
+                      <span>{actionLoadingText || 'Saving Draft...'}</span>
+                    </>
+                  ) : (
+                    'Save as Draft'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.actionBtnPrimary} ${isValidating ? styles.actionBtnLoading : ''}`}
+                  style={{ background: '#15803D' }}
+                  onClick={handleSaveAndValidate}
+                  disabled={isSavingDraft || isValidating}
+                >
+                  {isValidating ? (
+                    <>
+                      <span className={styles.buttonSpinner} />
+                      <span>{actionLoadingText || 'Saving & Validating...'}</span>
+                    </>
+                  ) : (
+                    `Save & Validate ${singleTitle}`
+                  )}
                 </button>
               </div>
             </form>
@@ -536,14 +887,37 @@ export default function OperationsPage() {
             <>
               {/* Read / Active Operation details matching Wireframe 5 */}
               <div className={styles.formGrid}>
-                <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>
-                    {op?.type === 'delivery' ? 'Delivery Address' : 'Receive From'}
-                  </label>
-                  <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
-                    {op?.contact || 'Azure Interior'}
+                {op?.type === 'internal' ? (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Source Location (From)</label>
+                      <div className={styles.fieldInput} style={{ background: '#F8FAFC', fontWeight: 600 }}>
+                        {op?.fromLocation || 'WH/Stock1'}
+                      </div>
+                    </div>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Destination Location (To)</label>
+                      <div className={styles.fieldInput} style={{ background: '#F8FAFC', fontWeight: 600 }}>
+                        {op?.toLocation || 'WH/Production'}
+                      </div>
+                    </div>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Purpose / Department</label>
+                      <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
+                        {op?.contact || 'Internal Assembly'}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>
+                      {op?.type === 'delivery' ? 'Delivery Address' : 'Receive From'}
+                    </label>
+                    <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
+                      {op?.contact || 'Azure Interior'}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel}>Schedule Date</label>
@@ -623,6 +997,25 @@ export default function OperationsPage() {
             </>
           )}
         </div>
+
+        <OperationStateModal
+          isOpen={isStateModalOpen}
+          type={opType}
+          reference={stateModalReference}
+          locationName={stateModalLocation}
+          lines={stateModalLines}
+          currentStep={stateModalStep}
+          statusBadge={stateModalStatusBadge}
+          waitingReason={stateModalWaitingReason}
+          errorMessage={stateModalErrorMessage}
+          onClose={() => {
+            setIsStateModalOpen(false);
+            setIsValidating(false);
+            setIsSavingDraft(false);
+            setActionLoadingText('');
+          }}
+          onConfirmDone={handleModalConfirmDone}
+        />
       </div>
     );
   }
@@ -823,6 +1216,25 @@ export default function OperationsPage() {
           })}
         </div>
       )}
+
+      <OperationStateModal
+        isOpen={isStateModalOpen}
+        type={opType}
+        reference={stateModalReference}
+        locationName={stateModalLocation}
+        lines={stateModalLines}
+        currentStep={stateModalStep}
+        statusBadge={stateModalStatusBadge}
+        waitingReason={stateModalWaitingReason}
+        errorMessage={stateModalErrorMessage}
+        onClose={() => {
+          setIsStateModalOpen(false);
+          setIsValidating(false);
+          setIsSavingDraft(false);
+          setActionLoadingText('');
+        }}
+        onConfirmDone={handleModalConfirmDone}
+      />
     </div>
   );
 }

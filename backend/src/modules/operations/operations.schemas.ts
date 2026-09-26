@@ -44,6 +44,7 @@ export const createOperationSchema = z
 
 export const updateOperationSchema = z
   .object({
+    status: operationStatusEnumZod.optional(),
     sourceLocationId: z.string().optional().nullable(),
     destLocationId: z.string().optional().nullable(),
     partnerName: z.string().max(255).optional().nullable(),

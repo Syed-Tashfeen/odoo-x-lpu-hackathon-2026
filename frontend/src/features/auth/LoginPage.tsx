@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Input } from '../../components/ui/Input';
 import { useAuthStore } from '../../stores/authStore';
+import { useDashboardStore } from '../../stores/dashboardStore';
 import { authService, loginZodSchema } from '../../lib/authService';
 import styles from './LoginPage.module.css';
 
@@ -45,6 +46,8 @@ export default function LoginPage() {
       // 2. Authenticate against database
       const result = await authService.login(trimmedLoginId, password);
       setAuth(result.user, result.token);
+      // Prefetch dashboard metrics into Zustand so dashboard opens with zero delay
+      useDashboardStore.getState().prefetch();
       toast.success(`Welcome back, ${result.user.name}!`);
       navigate(redirectTo, { replace: true });
     } catch (err: any) {

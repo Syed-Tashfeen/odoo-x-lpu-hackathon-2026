@@ -37,23 +37,16 @@ export interface DashboardData {
 
 export const dashboardService = {
   async getDashboardData(): Promise<DashboardData> {
-    // Fetch products, categories, operations from local store & server
-    const [{ items: products }, categories, operations] = await Promise.all([
-      productsService.getProducts(),
-      productsService.getCategories(),
-      operationsService.getOperations(),
+    // Fetch products, categories, operations, and backend KPIs concurrently
+    const [productsRes, categories, operations, apiRes] = await Promise.all([
+      productsService.getProducts().catch(() => ({ items: [], total: 0 })),
+      productsService.getCategories().catch(() => []),
+      operationsService.getOperations().catch(() => []),
+      api.get('/dashboard/kpis').catch(() => null),
     ]);
 
-    // Try API first
-    let apiData: any = null;
-    try {
-      const res = await api.get('/dashboard/kpis');
-      if (res.data?.data) {
-        apiData = res.data.data;
-      }
-    } catch {
-      // Use local compute
-    }
+    const products = productsRes?.items || [];
+    const apiData = apiRes?.data?.data || null;
 
     // Compute KPIs
     const totalProducts = products.length;
