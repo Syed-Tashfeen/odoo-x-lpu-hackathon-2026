@@ -39,9 +39,9 @@ export function setupSwagger(app: Express): void {
     swaggerUi.serve,
     swaggerUi.setup(doc, {
       customCss: ".swagger-ui .topbar { display: none }",
-      customSiteTitle: "AmiConnect API Docs",
+      customSiteTitle: "StockSense API Docs",
     })
   );
 
-  console.log("📄 AmiConnect Swagger UI available at /api-docs");
+  console.log("📄 Stocksense Swagger API available at /api-docs");
 }

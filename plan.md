@@ -348,13 +348,13 @@ export const stockMoves = pgTable("stock_moves", {
 
 ### Phase 2 — Products & Categories (Day 1–2)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | Categories CRUD                                             | `GET / POST / PATCH / DELETE /api/categories` |
-| 2  | Products CRUD                                               | `GET / POST / PATCH / DELETE /api/products` |
-| 3  | Product detail with stock per location                      | `GET /api/products/:id` includes `stockLevels` join |
-| 4  | SKU search + filters (category, low-stock)                  | Query params on `GET /api/products` |
-| 5  | Reorder rules per product                                   | `reorder_point` and `reorder_qty` on product |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | Categories CRUD                                             | `GET / POST / PATCH / DELETE /api/categories` | Completed |
+| 2  | Products CRUD                                               | `GET / POST / PATCH / DELETE /api/products` | Completed |
+| 3  | Product detail with stock per location                      | `GET /api/products/:id` includes `stockLevels` join | Completed |
+| 4  | SKU search + filters (category, low-stock)                  | Query params on `GET /api/products` | Completed |
+| 5  | Reorder rules per product                                   | `reorder_point` and `reorder_qty` on product | Completed |
 
 ### Phase 3 — Warehouses & Locations (Day 2)
 

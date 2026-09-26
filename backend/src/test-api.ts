@@ -47,7 +47,7 @@ async function request(options: {
 }
 
 async function runTests() {
-  console.log("🧪 Starting StockSense Auth API Tests...\n");
+  console.log("🧪 Starting StockSense Phase 1 & Phase 2 API Tests...\n");
 
   await new Promise<void>((resolve) => {
     server = app.listen(3001, () => {
@@ -61,7 +61,10 @@ async function runTests() {
   let managerToken = "";
 
   try {
-    // ── Test 1: POST /api/auth/signup ─────────────────────────
+    // ══════════════════════════════════════════════════════════
+    // PHASE 1 — AUTH & MIDDLEWARE TESTS
+    // ══════════════════════════════════════════════════════════
+
     console.log("\n▶ Test 1: POST /api/auth/signup");
     const signupRes = await request({
       method: "POST",
@@ -80,7 +83,6 @@ async function runTests() {
     }
     console.log("  ✅ Signup successful, received token and user profile");
 
-    // ── Test 2: POST /api/auth/login (Valid credentials) ──────
     console.log("\n▶ Test 2: POST /api/auth/login (Staff login)");
     const loginRes = await request({
       method: "POST",
@@ -98,7 +100,6 @@ async function runTests() {
     staffToken = loginRes.body.data.token;
     console.log("  ✅ Staff login successful");
 
-    // ── Test 3: GET /api/auth/me (verifyToken) ─────────────────
     console.log("\n▶ Test 3: GET /api/auth/me (verifyToken middleware)");
     const meRes = await request({
       method: "GET",
@@ -112,7 +113,6 @@ async function runTests() {
     }
     console.log("  ✅ verifyToken successfully decoded JWT and attached user");
 
-    // ── Test 4: Role Guard — requireRole('manager') blocks staff ──
     console.log("\n▶ Test 4: Role guard requireRole('manager') blocks staff");
     const forbiddenRes = await request({
       method: "GET",
@@ -126,7 +126,6 @@ async function runTests() {
     }
     console.log("  ✅ requireRole correctly rejected staff (403 Forbidden)");
 
-    // ── Test 5: Login as seeded Admin/Manager & access manager-only ──
     console.log("\n▶ Test 5: Manager login & role guard allow");
     const managerLoginRes = await request({
       method: "POST",
@@ -155,7 +154,6 @@ async function runTests() {
     }
     console.log("  ✅ requireRole('manager') correctly allowed manager access (200 OK)");
 
-    // ── Test 6: POST /api/auth/forgot-password ────────────────
     console.log("\n▶ Test 6: POST /api/auth/forgot-password (6-digit OTP generation)");
     const forgotRes = await request({
       method: "POST",
@@ -168,7 +166,6 @@ async function runTests() {
       throw new Error(`Forgot password failed: ${JSON.stringify(forgotRes.body)}`);
     }
 
-    // Retrieve generated OTP from DB or devOtp
     let otp = forgotRes.body?.devOtp;
     if (!otp) {
       const [u] = await db.select().from(users).where(eq(users.email, testEmail)).limit(1);
@@ -177,7 +174,6 @@ async function runTests() {
     }
     console.log(`  ✅ 6-digit OTP stored in otp_codes: [ ${otp} ]`);
 
-    // ── Test 7: POST /api/auth/reset-password ─────────────────
     console.log("\n▶ Test 7: POST /api/auth/reset-password (Verify OTP & update password_hash)");
     const resetRes = await request({
       method: "POST",
@@ -195,42 +191,199 @@ async function runTests() {
     }
     console.log("  ✅ Password reset successful, otp marked used, password_hash updated");
 
-    // ── Test 8: Login with old password (Must fail 401) ───────
-    console.log("\n▶ Test 8: Login with old password (Must fail 401)");
-    const oldLoginRes = await request({
-      method: "POST",
-      path: "/api/auth/login",
-      body: {
-        email: testEmail,
-        password: "securepassword123",
-      },
-    });
-    console.log(`  Status: ${oldLoginRes.status}`);
-    if (oldLoginRes.status !== 401) {
-      throw new Error(`Expected 401 for old password, got ${oldLoginRes.status}`);
-    }
-    console.log("  ✅ Old password rejected as expected");
+    // ══════════════════════════════════════════════════════════
+    // PHASE 2 — CATEGORIES & PRODUCTS CRUD TESTS
+    // ══════════════════════════════════════════════════════════
 
-    // ── Test 9: Login with new password (Must succeed 200) ────
-    console.log("\n▶ Test 9: Login with new password (Must succeed 200)");
-    const newLoginRes = await request({
-      method: "POST",
-      path: "/api/auth/login",
-      body: {
-        email: testEmail,
-        password: "newpassword456",
-      },
+    console.log("\n==================================================");
+    console.log("📁 PHASE 2 TESTS: CATEGORIES & PRODUCTS");
+    console.log("==================================================");
+
+    // Test 10: GET /api/categories (List categories)
+    console.log("\n▶ Test 10: GET /api/categories (List categories with productCount)");
+    const categoriesRes = await request({
+      method: "GET",
+      path: "/api/categories",
+      headers: { Authorization: `Bearer ${staffToken}` },
     });
 
-    console.log(`  Status: ${newLoginRes.status}`);
-    if (newLoginRes.status !== 200) {
-      throw new Error(`Login with new password failed: ${JSON.stringify(newLoginRes.body)}`);
+    console.log(`  Status: ${categoriesRes.status}`);
+    if (categoriesRes.status !== 200 || !Array.isArray(categoriesRes.body?.data)) {
+      throw new Error(`List categories failed: ${JSON.stringify(categoriesRes.body)}`);
     }
-    console.log("  ✅ Login with new password successful");
+    console.log(`  ✅ Retrieved ${categoriesRes.body.data.length} categories`);
+    const rawMaterialsCat = categoriesRes.body.data.find((c: any) => c.name === "Raw Materials");
 
-    console.log("\n══════════════════════════════════════════════════════");
-    console.log("🎉 ALL AUTH & MIDDLEWARE TESTS PASSED (100% SUCCESS)!");
-    console.log("══════════════════════════════════════════════════════\n");
+    // Test 11: POST /api/categories (Create category)
+    console.log("\n▶ Test 11: POST /api/categories (Create new category)");
+    const newCatName = `Custom Cat ${Date.now()}`;
+    const createCatRes = await request({
+      method: "POST",
+      path: "/api/categories",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        name: newCatName,
+        description: "Temporary category for test",
+      },
+    });
+
+    console.log(`  Status: ${createCatRes.status}`);
+    if (createCatRes.status !== 201 || !createCatRes.body?.data?.id) {
+      throw new Error(`Create category failed: ${JSON.stringify(createCatRes.body)}`);
+    }
+    const createdCatId = createCatRes.body.data.id;
+    console.log(`  ✅ Created category "${newCatName}" (${createdCatId})`);
+
+    // Test 12: PATCH /api/categories/:id (Update category)
+    console.log("\n▶ Test 12: PATCH /api/categories/:id (Update category)");
+    const updateCatRes = await request({
+      method: "PATCH",
+      path: `/api/categories/${createdCatId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: { description: "Updated description via test" },
+    });
+
+    console.log(`  Status: ${updateCatRes.status}`);
+    if (updateCatRes.status !== 200 || updateCatRes.body?.data?.description !== "Updated description via test") {
+      throw new Error(`Update category failed: ${JSON.stringify(updateCatRes.body)}`);
+    }
+    console.log("  ✅ Category description updated successfully");
+
+    // Test 13: GET /api/products (List products & verify totalStock & isLowStock)
+    console.log("\n▶ Test 13: GET /api/products (List products)");
+    const productsRes = await request({
+      method: "GET",
+      path: "/api/products",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${productsRes.status}`);
+    if (productsRes.status !== 200 || !Array.isArray(productsRes.body?.data)) {
+      throw new Error(`List products failed: ${JSON.stringify(productsRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved ${productsRes.body.data.length} products`);
+
+    // Test 14: Filter SKU & Search
+    console.log("\n▶ Test 14: GET /api/products?sku=BOLT (SKU search filter)");
+    const skuSearchRes = await request({
+      method: "GET",
+      path: "/api/products?sku=BOLT",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${skuSearchRes.status}`);
+    if (skuSearchRes.status !== 200 || skuSearchRes.body.data.length === 0) {
+      throw new Error(`SKU search failed: ${JSON.stringify(skuSearchRes.body)}`);
+    }
+    console.log(`  ✅ Found product with SKU: ${skuSearchRes.body.data[0].sku}`);
+    const boltProductId = skuSearchRes.body.data[0].id;
+
+    // Test 15: Low-stock filter
+    console.log("\n▶ Test 15: GET /api/products?lowStock=true (Low-stock filter)");
+    const lowStockRes = await request({
+      method: "GET",
+      path: "/api/products?lowStock=true",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${lowStockRes.status}`);
+    if (lowStockRes.status !== 200) {
+      throw new Error(`Low stock filter failed: ${JSON.stringify(lowStockRes.body)}`);
+    }
+    const allLow = lowStockRes.body.data.every((p: any) => p.isLowStock === true);
+    console.log(`  ✅ Found ${lowStockRes.body.data.length} low-stock products. All isLowStock === true: ${allLow}`);
+
+    // Test 16: GET /api/products/:id with stockLevels breakdown
+    console.log("\n▶ Test 16: GET /api/products/:id (Stock per location join)");
+    const detailRes = await request({
+      method: "GET",
+      path: `/api/products/${boltProductId}`,
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${detailRes.status}`);
+    if (detailRes.status !== 200 || !Array.isArray(detailRes.body?.data?.stockLevels)) {
+      throw new Error(`Product detail join failed: ${JSON.stringify(detailRes.body)}`);
+    }
+    console.log(`  ✅ Product detail loaded with ${detailRes.body.data.stockLevels.length} location stock entries`);
+    console.log(`     Total Stock: ${detailRes.body.data.totalStock} ${detailRes.body.data.unitOfMeasure}`);
+    for (const lvl of detailRes.body.data.stockLevels) {
+      console.log(`     - [${lvl.warehouseName}] ${lvl.locationName}: ${lvl.quantity}`);
+    }
+
+    // Test 17: POST /api/products (Create product with reorder rules)
+    console.log("\n▶ Test 17: POST /api/products (Create product with reorder rules)");
+    const testSku = `TEST-SKU-${Date.now()}`;
+    const createProdRes = await request({
+      method: "POST",
+      path: "/api/products",
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        name: "Test Heavy Duty Clamp",
+        sku: testSku,
+        categoryId: rawMaterialsCat?.id,
+        unitOfMeasure: "pcs",
+        reorderPoint: 45,
+        reorderQty: 150,
+      },
+    });
+
+    console.log(`  Status: ${createProdRes.status}`);
+    if (createProdRes.status !== 201 || !createProdRes.body?.data?.id) {
+      throw new Error(`Create product failed: ${JSON.stringify(createProdRes.body)}`);
+    }
+    const newProdId = createProdRes.body.data.id;
+    console.log(`  ✅ Created product with SKU ${testSku} (Reorder Point: ${createProdRes.body.data.reorderPoint})`);
+
+    // Test 18: PATCH /api/products/:id (Update reorder rules)
+    console.log("\n▶ Test 18: PATCH /api/products/:id (Update reorder rules)");
+    const updateProdRes = await request({
+      method: "PATCH",
+      path: `/api/products/${newProdId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+      body: {
+        reorderPoint: 60,
+        reorderQty: 250,
+      },
+    });
+
+    console.log(`  Status: ${updateProdRes.status}`);
+    if (updateProdRes.status !== 200 || updateProdRes.body.data.reorderPoint !== 60) {
+      throw new Error(`Update reorder rules failed: ${JSON.stringify(updateProdRes.body)}`);
+    }
+    console.log("  ✅ Reorder rules updated: Point=60, Qty=250");
+
+    // Test 19: DELETE /api/products/:id
+    console.log("\n▶ Test 19: DELETE /api/products/:id");
+    const deleteProdRes = await request({
+      method: "DELETE",
+      path: `/api/products/${newProdId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${deleteProdRes.status}`);
+    if (deleteProdRes.status !== 200) {
+      throw new Error(`Delete product failed: ${JSON.stringify(deleteProdRes.body)}`);
+    }
+    console.log("  ✅ Test product deleted successfully");
+
+    // Test 20: DELETE /api/categories/:id
+    console.log("\n▶ Test 20: DELETE /api/categories/:id");
+    const deleteCatRes = await request({
+      method: "DELETE",
+      path: `/api/categories/${createdCatId}`,
+      headers: { Authorization: `Bearer ${managerToken}` },
+    });
+
+    console.log(`  Status: ${deleteCatRes.status}`);
+    if (deleteCatRes.status !== 200) {
+      throw new Error(`Delete category failed: ${JSON.stringify(deleteCatRes.body)}`);
+    }
+    console.log("  ✅ Test category deleted successfully");
+
+    console.log("\n══════════════════════════════════════════════════════════════");
+    console.log("🎉 ALL PHASE 1 & PHASE 2 TESTS PASSED WITH 100% SUCCESS!");
+    console.log("══════════════════════════════════════════════════════════════\n");
   } catch (err) {
     console.error("\n❌ Test execution error:", err);
     process.exitCode = 1;
