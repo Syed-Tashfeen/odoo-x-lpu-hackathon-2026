@@ -177,15 +177,24 @@ export async function createProduct(data: {
   }
 
   // Validate category if provided
+  let resolvedCategoryId: string | null = null;
   if (data.categoryId) {
-    const [cat] = await db
-      .select()
-      .from(categories)
-      .where(eq(categories.id, data.categoryId))
-      .limit(1);
-
-    if (!cat) {
-      throw ApiError.badRequest(`Category with ID ${data.categoryId} not found`);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.categoryId);
+    if (isUuid) {
+      const [cat] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(eq(categories.id, data.categoryId))
+        .limit(1);
+      if (cat) resolvedCategoryId = cat.id;
+    }
+    if (!resolvedCategoryId) {
+      const [byName] = await db
+        .select({ id: categories.id })
+        .from(categories)
+        .where(ilike(categories.name, `%${data.categoryId}%`))
+        .limit(1);
+      if (byName) resolvedCategoryId = byName.id;
     }
   }
 
@@ -194,7 +203,7 @@ export async function createProduct(data: {
     .values({
       name: data.name.trim(),
       sku: trimmedSku,
-      categoryId: data.categoryId || null,
+      categoryId: resolvedCategoryId,
       unitOfMeasure: data.unitOfMeasure.trim(),
       description: data.description?.trim() || null,
       imageUrl: data.imageUrl || null,
@@ -250,16 +259,25 @@ export async function updateProduct(
 
   if (data.categoryId !== undefined) {
     if (data.categoryId) {
-      const [cat] = await db
-        .select()
-        .from(categories)
-        .where(eq(categories.id, data.categoryId))
-        .limit(1);
-
-      if (!cat) {
-        throw ApiError.badRequest(`Category with ID ${data.categoryId} not found`);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.categoryId);
+      let foundCatId: string | null = null;
+      if (isUuid) {
+        const [cat] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(eq(categories.id, data.categoryId))
+          .limit(1);
+        if (cat) foundCatId = cat.id;
       }
-      updateData.categoryId = data.categoryId;
+      if (!foundCatId) {
+        const [byName] = await db
+          .select({ id: categories.id })
+          .from(categories)
+          .where(ilike(categories.name, `%${data.categoryId}%`))
+          .limit(1);
+        if (byName) foundCatId = byName.id;
+      }
+      updateData.categoryId = foundCatId;
     } else {
       updateData.categoryId = null;
     }

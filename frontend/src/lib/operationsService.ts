@@ -423,13 +423,20 @@ export const operationsService = {
     saveStoredOperations(list);
 
     try {
-      await api.post('/operations', {
+      const res = await api.post('/operations', {
         type: newOp.type,
         partnerName: newOp.contact,
         scheduledDate: newOp.scheduledDate,
         notes: newOp.notes,
         lines: newOp.lines.map((l) => ({ productId: l.productId, quantity: l.quantity })),
       });
+      if (res.data?.data) {
+        newOp.id = res.data.data.id;
+        newOp.reference = res.data.data.reference || newOp.reference;
+        list[0].id = res.data.data.id;
+        list[0].reference = newOp.reference;
+        saveStoredOperations(list);
+      }
     } catch {
       // Offline fallback
     }

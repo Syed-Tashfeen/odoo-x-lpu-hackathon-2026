@@ -267,7 +267,12 @@ export const productsService = {
     saveStoredCategories(cats);
 
     try {
-      await api.post('/categories', { name: newCat.name, description: newCat.description });
+      const res = await api.post('/categories', { name: newCat.name, description: newCat.description });
+      if (res.data?.data?.id) {
+        newCat.id = res.data.data.id;
+        cats[cats.length - 1].id = res.data.data.id;
+        saveStoredCategories(cats);
+      }
     } catch {
       // Offline fallback
     }
@@ -421,7 +426,7 @@ export const productsService = {
     saveStoredProducts(list);
 
     try {
-      await api.post('/products', {
+      const res = await api.post('/products', {
         sku: newProduct.sku,
         name: newProduct.name,
         categoryId: newProduct.categoryId || undefined,
@@ -430,6 +435,11 @@ export const productsService = {
         reorderPoint: newProduct.reorderPoint,
         reorderQty: newProduct.reorderQty,
       });
+      if (res.data?.data?.id) {
+        newProduct.id = res.data.data.id;
+        list[0].id = res.data.data.id;
+        saveStoredProducts(list);
+      }
     } catch {
       // Offline fallback
     }

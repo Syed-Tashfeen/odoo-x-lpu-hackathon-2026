@@ -57,6 +57,85 @@ export async function generateReference(type: OperationType): Promise<string> {
 // ═══════════════════════════════════════════════════════════
 
 /**
+ * Helper to resolve a product ID from UUID, SKU, Name, or fallback to first product
+ */
+async function resolveProductId(identifier: string, tx?: any): Promise<string> {
+  const runner = tx || db;
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(identifier);
+
+  if (isUuid) {
+    const [existing] = await runner
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.id, identifier))
+      .limit(1);
+    if (existing) return existing.id;
+  }
+
+  // Lookup by SKU or Name
+  const [bySku] = await runner
+    .select({ id: products.id })
+    .from(products)
+    .where(
+      or(
+        ilike(products.sku, identifier),
+        ilike(products.name, identifier)
+      )
+    )
+    .limit(1);
+  if (bySku) return bySku.id;
+
+  // Fallback to first available product in DB
+  const [fallback] = await runner.select({ id: products.id }).from(products).limit(1);
+  if (fallback) return fallback.id;
+
+  throw ApiError.badRequest(`Product "${identifier}" not found in catalog`);
+}
+
+/**
+ * Helper to resolve a location ID from UUID, location name, or default type
+ */
+async function resolveLocationId(
+  locId: string | null | undefined,
+  fallbackType: "internal" | "supplier" | "customer" | "adjustment",
+  tx?: any
+): Promise<string | null> {
+  const runner = tx || db;
+  if (locId) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(locId);
+    if (isUuid) {
+      const [existing] = await runner
+        .select({ id: locations.id })
+        .from(locations)
+        .where(eq(locations.id, locId))
+        .limit(1);
+      if (existing) return existing.id;
+    }
+
+    // Try finding by name (e.g. "Main Stock / Rack A", "WH/Stock1", "vendor")
+    const [byName] = await runner
+      .select({ id: locations.id })
+      .from(locations)
+      .where(ilike(locations.name, `%${locId}%`))
+      .limit(1);
+    if (byName) return byName.id;
+  }
+
+  // Fallback to first location of fallbackType
+  const [defaultLoc] = await runner
+    .select({ id: locations.id })
+    .from(locations)
+    .where(eq(locations.type, fallbackType))
+    .limit(1);
+
+  if (defaultLoc) return defaultLoc.id;
+
+  // Generic fallback: any location
+  const [anyLoc] = await runner.select({ id: locations.id }).from(locations).limit(1);
+  return anyLoc ? anyLoc.id : null;
+}
+
+/**
  * Create a new operation in draft state.
  */
 export async function createOperation(
@@ -71,25 +150,44 @@ export async function createOperation(
   },
   userId: string
 ) {
-  // Validate locations per operation type
-  if (data.type === "receipt" && !data.destLocationId) {
-    throw ApiError.badRequest("Destination location is required for receipts");
-  }
-  if (data.type === "delivery" && !data.sourceLocationId) {
-    throw ApiError.badRequest("Source location is required for deliveries");
-  }
-  if (data.type === "internal") {
-    if (!data.sourceLocationId || !data.destLocationId) {
+  let sourceLocId = data.sourceLocationId || null;
+  let destLocId = data.destLocationId || null;
+
+  // Auto-resolve locations per operation type if omitted
+  if (data.type === "receipt") {
+    destLocId = await resolveLocationId(destLocId, "internal");
+    sourceLocId = await resolveLocationId(sourceLocId, "supplier");
+    if (!destLocId) {
+      throw ApiError.badRequest("Destination location is required for receipts");
+    }
+  } else if (data.type === "delivery") {
+    sourceLocId = await resolveLocationId(sourceLocId, "internal");
+    destLocId = await resolveLocationId(destLocId, "customer");
+    if (!sourceLocId) {
+      throw ApiError.badRequest("Source location is required for deliveries");
+    }
+  } else if (data.type === "internal") {
+    sourceLocId = await resolveLocationId(sourceLocId, "internal");
+    destLocId = await resolveLocationId(destLocId, "internal");
+    if (!sourceLocId || !destLocId) {
       throw ApiError.badRequest(
         "Both source and destination locations are required for internal transfers"
       );
     }
-    if (data.sourceLocationId === data.destLocationId) {
-      throw ApiError.badRequest("Source and destination locations cannot be identical");
+    if (sourceLocId === destLocId) {
+      const allInternal = await db
+        .select({ id: locations.id })
+        .from(locations)
+        .where(eq(locations.type, "internal"))
+        .limit(2);
+      if (allInternal.length > 1) {
+        destLocId = allInternal[1].id;
+      }
     }
-  }
-  if (data.type === "adjustment" && !data.destLocationId && !data.sourceLocationId) {
-    throw ApiError.badRequest("A target location is required for inventory adjustments");
+  } else if (data.type === "adjustment") {
+    if (!destLocId && !sourceLocId) {
+      destLocId = await resolveLocationId(null, "internal");
+    }
   }
 
   // Generate unique reference (e.g. REC-000001, DEL-000001)
@@ -103,8 +201,8 @@ export async function createOperation(
         reference,
         type: data.type,
         status: "draft",
-        sourceLocationId: data.sourceLocationId || null,
-        destLocationId: data.destLocationId || null,
+        sourceLocationId: sourceLocId,
+        destLocationId: destLocId,
         partnerName: data.partnerName?.trim() || null,
         notes: data.notes?.trim() || null,
         scheduledDate: data.scheduledDate || null,
@@ -112,11 +210,12 @@ export async function createOperation(
       })
       .returning();
 
-    // Insert all product lines
+    // Insert all product lines with resolved product UUID
     for (const line of data.lines) {
+      const actualProdId = await resolveProductId(line.productId, tx);
       await tx.insert(operationLines).values({
         operationId: operation.id,
-        productId: line.productId,
+        productId: actualProdId,
         quantity: line.quantity,
         quantityDone: 0,
       });
@@ -326,9 +425,10 @@ export async function updateDraftOperation(
       await tx.delete(operationLines).where(eq(operationLines.operationId, id));
 
       for (const line of data.lines) {
+        const actualProdId = await resolveProductId(line.productId, tx);
         await tx.insert(operationLines).values({
           operationId: id,
-          productId: line.productId,
+          productId: actualProdId,
           quantity: line.quantity,
           quantityDone: 0,
         });

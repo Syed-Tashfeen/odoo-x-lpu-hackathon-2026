@@ -22,7 +22,6 @@ export const createProductSchema = z
       .openapi({ example: "SCR-M4-020" }),
     categoryId: z
       .string()
-      .uuid("Invalid category ID format")
       .optional()
       .nullable()
       .openapi({ example: "123e4567-e89b-12d3-a456-426614174000" }),
@@ -33,7 +32,7 @@ export const createProductSchema = z
       .default("pcs")
       .openapi({ example: "pcs" }),
     description: z.string().optional().nullable().openapi({ example: "Pack of 100 industrial grade screws" }),
-    imageUrl: z.string().url("Must be a valid URL").optional().nullable().openapi({ example: "https://example.com/img.png" }),
+    imageUrl: z.string().optional().nullable().openapi({ example: "https://example.com/img.png" }),
     reorderPoint: z.coerce.number().int().min(0, "Reorder point must be >= 0").default(0).openapi({ example: 50 }),
     reorderQty: z.coerce.number().int().min(0, "Reorder quantity must be >= 0").default(0).openapi({ example: 100 }),
   })
@@ -43,10 +42,10 @@ export const updateProductSchema = z
   .object({
     name: z.string().min(1).max(255).optional(),
     sku: z.string().min(1).max(100).optional(),
-    categoryId: z.string().uuid().optional().nullable(),
+    categoryId: z.string().optional().nullable(),
     unitOfMeasure: z.string().min(1).max(50).optional(),
     description: z.string().optional().nullable(),
-    imageUrl: z.string().url().optional().nullable(),
+    imageUrl: z.string().optional().nullable(),
     reorderPoint: z.coerce.number().int().min(0).optional(),
     reorderQty: z.coerce.number().int().min(0).optional(),
   })

@@ -20,7 +20,7 @@ export const operationStatusEnumZod = z.enum([
 ]);
 
 export const operationLineInputSchema = z.object({
-  productId: z.string().uuid("Invalid product ID format"),
+  productId: z.string().min(1, "Product ID or SKU is required"),
   quantity: z
     .coerce
     .number()
@@ -31,8 +31,8 @@ export const operationLineInputSchema = z.object({
 export const createOperationSchema = z
   .object({
     type: operationTypeEnumZod,
-    sourceLocationId: z.string().uuid("Invalid source location ID").optional().nullable(),
-    destLocationId: z.string().uuid("Invalid destination location ID").optional().nullable(),
+    sourceLocationId: z.string().optional().nullable(),
+    destLocationId: z.string().optional().nullable(),
     partnerName: z.string().max(255).optional().nullable().openapi({ example: "Apple Inc. California" }),
     notes: z.string().optional().nullable().openapi({ example: "Delivery of 50 new M3 MacBooks" }),
     scheduledDate: z.coerce.date().optional().nullable(),
@@ -44,8 +44,8 @@ export const createOperationSchema = z
 
 export const updateOperationSchema = z
   .object({
-    sourceLocationId: z.string().uuid().optional().nullable(),
-    destLocationId: z.string().uuid().optional().nullable(),
+    sourceLocationId: z.string().optional().nullable(),
+    destLocationId: z.string().optional().nullable(),
     partnerName: z.string().max(255).optional().nullable(),
     notes: z.string().optional().nullable(),
     scheduledDate: z.coerce.date().optional().nullable(),
