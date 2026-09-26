@@ -24,8 +24,10 @@ export default function LoginPage() {
     setErrorMessage(null);
     setFieldErrors({});
 
+    const trimmedLoginId = loginId.trim();
+
     // 1. Zod client-side validation
-    const validationResult = loginZodSchema.safeParse({ loginId, password });
+    const validationResult = loginZodSchema.safeParse({ loginId: trimmedLoginId, password });
     if (!validationResult.success) {
       const formattedErrors: Record<string, string> = {};
       for (const issue of validationResult.error.issues) {
@@ -41,7 +43,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       // 2. Authenticate against database
-      const result = await authService.login(loginId, password);
+      const result = await authService.login(trimmedLoginId, password);
       setAuth(result.user, result.token);
       toast.success(`Welcome back, ${result.user.name}!`);
       navigate(redirectTo, { replace: true });

@@ -159,14 +159,37 @@ export const authService = {
    */
   async login(loginIdOrEmail: string, password: string): Promise<AuthSuccessResult> {
     const trimmedId = loginIdOrEmail.trim().toLowerCase();
+    // 1. Check local client-side persistent user database first
+    const users = getUsersFromDb();
+    const matchedUser = users.find((u) => {
+      const emailMatch = u.email.toLowerCase() === trimmedId;
+      const loginIdMatch = u.loginId.toLowerCase() === trimmedId;
+      return (emailMatch || loginIdMatch) && u.password === password;
+    });
 
-    // In live browser mode, try backend API first
+    if (matchedUser) {
+      const authUser: AuthUser = {
+        id: matchedUser.id,
+        name: matchedUser.name,
+        email: matchedUser.email,
+        role: matchedUser.role,
+        status: matchedUser.status,
+        emailVerified: matchedUser.emailVerified,
+        createdAt: matchedUser.createdAt,
+      };
+
+      const token = `stocksense_jwt_${matchedUser.id}_${Date.now()}`;
+      return { user: authUser, token };
+    }
+
+    // 2. Fallback: try backend API with a short timeout if running
     if (!isTestEnv) {
       try {
-        const response = await api.post('/auth/login', {
-          email: trimmedId,
-          password,
-        });
+        const response = await api.post(
+          '/auth/login',
+          { email: trimmedId, password },
+          { timeout: 3000 }
+        );
         if (response.data?.data) {
           const { user, token, accessToken } = response.data.data;
           const actualToken = token || accessToken;
@@ -190,30 +213,7 @@ export const authService = {
       }
     }
 
-    // Check client-side persistent user database (test mode or fallback)
-    const users = getUsersFromDb();
-    const matchedUser = users.find((u) => {
-      const emailMatch = u.email.toLowerCase() === trimmedId;
-      const loginIdMatch = u.loginId.toLowerCase() === trimmedId;
-      return (emailMatch || loginIdMatch) && u.password === password;
-    });
-
-    if (!matchedUser) {
-      throw new Error('Invalid Login Id or Password');
-    }
-
-    const authUser: AuthUser = {
-      id: matchedUser.id,
-      name: matchedUser.name,
-      email: matchedUser.email,
-      role: matchedUser.role,
-      status: matchedUser.status,
-      emailVerified: matchedUser.emailVerified,
-      createdAt: matchedUser.createdAt,
-    };
-
-    const token = `stocksense_jwt_${matchedUser.id}_${Date.now()}`;
-    return { user: authUser, token };
+    throw new Error('Invalid Login Id or Password');
   },
 
   /**

@@ -48,6 +48,39 @@
   --color-cancelled-text: #DC2626;
 }
 
+/* ---- Dark Mode Tokens ------------------------------------- */
+[data-theme="dark"] {
+  --color-primary:        #9B6B8E;
+  --color-primary-hover:  #B582A7;
+  --color-primary-light:  rgba(155, 107, 142, 0.20);
+  --color-primary-soft:   rgba(155, 107, 142, 0.10);
+  --color-primary-dark:   #68415F;
+
+  --color-bg:             #0F172A;
+  --color-bg-alt:         #1E293B;
+  --color-surface:        #1E293B;
+  --color-surface-2:      #334155;
+
+  --color-border:         #334155;
+  --color-border-strong:  #475569;
+
+  --color-text:           #F8FAFC;
+  --color-text-muted:     #94A3B8;
+  --color-text-subtle:    #64748B;
+  --color-text-on-primary:#FFFFFF;
+
+  --color-draft-bg:       #334155;
+  --color-draft-text:     #CBD5E1;
+  --color-waiting-bg:     #451A03;
+  --color-waiting-text:   #FDE68A;
+  --color-ready-bg:       #064E3B;
+  --color-ready-text:     #A7F3D0;
+  --color-done-bg:        #065F46;
+  --color-done-text:      #ECFDF5;
+  --color-cancelled-bg:   #450A0A;
+  --color-cancelled-text: #FECACA;
+}
+
 /* ---- Typography ------------------------------------------- */
 :root {
   --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
