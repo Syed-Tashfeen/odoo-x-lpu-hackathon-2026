@@ -15,6 +15,7 @@ import locationsRoutes from "./modules/warehouses/locations.routes.js";
 import operationsRoutes from "./modules/operations/operations.routes.js";
 import stockRoutes from "./modules/stock/stock.routes.js";
 import dashboardRoutes from "./modules/dashboard/dashboard.routes.js";
+import profileRoutes from "./modules/profile/profile.routes.js";
 
 // ── Logger ────────────────────────────────────────────────
 const logger = pino({
@@ -67,6 +68,9 @@ app.use("/api/stock", stockRoutes);
 
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+
+app.use("/api/v1/me", profileRoutes);
+app.use("/api/me", profileRoutes);
 
 // ── Error handler (must be last) ──────────────────────────
 app.use(errorHandler);

@@ -929,8 +929,135 @@ async function runTests() {
     }
     console.log(`  ✅ Warehouse-scoped KPIs retrieved: ${whKpisRes.body.data.kpis.totalStockQuantity} units on hand in "${mainWh.name}"`);
 
+    // ══════════════════════════════════════════════════════════
+    // PHASE 6 — PROFILE & SETTINGS TESTS
+    // ══════════════════════════════════════════════════════════
+
+    console.log("\n==================================================");
+    console.log("👤 PHASE 6 TESTS: PROFILE & SETTINGS");
+    console.log("==================================================");
+
+    // ── Test 47: GET /api/me (Current user profile) ───────────
+    console.log("\n▶ Test 47: GET /api/me (Retrieve authenticated user profile)");
+    const profileRes = await request({
+      method: "GET",
+      path: "/api/me",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+
+    console.log(`  Status: ${profileRes.status}`);
+    if (profileRes.status !== 200 || !profileRes.body?.data?.id) {
+      throw new Error(`Get profile failed: ${JSON.stringify(profileRes.body)}`);
+    }
+    console.log(`  ✅ Retrieved profile for: ${profileRes.body.data.name} (${profileRes.body.data.email}, Role: ${profileRes.body.data.role})`);
+    if (profileRes.body.data.passwordHash) {
+      throw new Error("Security vulnerability: passwordHash exposed in profile response!");
+    }
+    console.log("  ✅ Security check: passwordHash is not exposed");
+
+    // ── Test 48: PATCH /api/me (Update name) ──────────────────
+    console.log("\n▶ Test 48: PATCH /api/me (Update user profile name)");
+    const updatedName = "Apple Logistics Specialist";
+    const updateProfileRes = await request({
+      method: "PATCH",
+      path: "/api/me",
+      headers: { Authorization: `Bearer ${staffToken}` },
+      body: { name: updatedName },
+    });
+
+    console.log(`  Status: ${updateProfileRes.status}`);
+    if (updateProfileRes.status !== 200 || updateProfileRes.body?.data?.name !== updatedName) {
+      throw new Error(`Update profile failed: ${JSON.stringify(updateProfileRes.body)}`);
+    }
+    console.log(`  ✅ User name successfully updated to: "${updateProfileRes.body.data.name}"`);
+
+    // Verify persistence with a fresh GET /api/me
+    const verifyProfileRes = await request({
+      method: "GET",
+      path: "/api/me",
+      headers: { Authorization: `Bearer ${staffToken}` },
+    });
+    if (verifyProfileRes.body?.data?.name !== updatedName) {
+      throw new Error("Profile name update was not persisted");
+    }
+    console.log("  ✅ Persistence verified: GET /api/me confirms updated name");
+
+    // ── Test 49: PATCH /api/me (Email conflict guard) ─────────
+    console.log("\n▶ Test 49: PATCH /api/me (Email collision guard with existing user)");
+    const conflictEmailRes = await request({
+      method: "PATCH",
+      path: "/api/me",
+      headers: { Authorization: `Bearer ${staffToken}` },
+      body: { email: "admin@stocksense.com" }, // Existing manager email
+    });
+
+    console.log(`  Status: ${conflictEmailRes.status}`);
+    if (conflictEmailRes.status !== 409 && conflictEmailRes.status !== 400) {
+      throw new Error(`Expected HTTP 409 or 400 for duplicate email, got: ${conflictEmailRes.status}`);
+    }
+    console.log("  ✅ Email conflict guard rejected duplicate email address cleanly");
+
+    // ── Test 50: PATCH /api/me/password (Incorrect current password) ──
+    console.log("\n▶ Test 50: PATCH /api/me/password (Incorrect current password guard)");
+    const wrongPasswordRes = await request({
+      method: "PATCH",
+      path: "/api/me/password",
+      headers: { Authorization: `Bearer ${staffToken}` },
+      body: {
+        currentPassword: "wrongpassword999",
+        newPassword: "brandnewpassword123",
+      },
+    });
+
+    console.log(`  Status: ${wrongPasswordRes.status}`);
+    if (wrongPasswordRes.status !== 400) {
+      throw new Error(`Expected HTTP 400 for incorrect password, got: ${wrongPasswordRes.status}`);
+    }
+    console.log("  ✅ Rejected incorrect current password attempt with HTTP 400");
+
+    // ── Test 51: PATCH /api/me/password (Successful password change & login) ──
+    console.log("\n▶ Test 51: PATCH /api/me/password (Successful password change & verification)");
+    const newPassword = "brandnewpassword123";
+    const changePasswordRes = await request({
+      method: "PATCH",
+      path: "/api/me/password",
+      headers: { Authorization: `Bearer ${staffToken}` },
+      body: {
+        currentPassword: "newpassword456",
+        newPassword: newPassword,
+      },
+    });
+
+    console.log(`  Status: ${changePasswordRes.status}`);
+    if (changePasswordRes.status !== 200) {
+      throw new Error(`Password change failed: ${JSON.stringify(changePasswordRes.body)}`);
+    }
+    console.log("  ✅ Password changed successfully");
+
+    // Verify old password no longer works
+    const oldLoginRes = await request({
+      method: "POST",
+      path: "/api/auth/login",
+      body: { email: testEmail, password: "newpassword456" },
+    });
+    if (oldLoginRes.status === 200) {
+      throw new Error("Old password still works after password change!");
+    }
+    console.log("  ✅ Old password is now invalid (HTTP 401)");
+
+    // Verify new password works
+    const newLoginRes = await request({
+      method: "POST",
+      path: "/api/auth/login",
+      body: { email: testEmail, password: newPassword },
+    });
+    if (newLoginRes.status !== 200 || !newLoginRes.body?.data?.token) {
+      throw new Error("Login with new password failed!");
+    }
+    console.log("  ✅ Login with new password succeeded, returned fresh JWT token");
+
     console.log("\n══════════════════════════════════════════════════════════════");
-    console.log("🎉 ALL PHASE 1, 2, 3, 4, AND 5 TESTS PASSED WITH 100% SUCCESS!");
+    console.log("🎉 ALL PHASE 1, 2, 3, 4, 5, AND 6 TESTS PASSED WITH 100% SUCCESS!");
     console.log("══════════════════════════════════════════════════════════════\n");
   } catch (err) {
     console.error("\n❌ Test execution error:", err);

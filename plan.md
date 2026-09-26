@@ -395,11 +395,11 @@ This is the **core** of the system. A single unified operations module handles r
 
 ### Phase 6 — Profile & Settings (Day 3)
 
-| #  | Task                                                        | Details |
-| -- | ----------------------------------------------------------- | ------- |
-| 1  | `GET /api/me` — current user profile                        | |
-| 2  | `PATCH /api/me` — update name/email                         | |
-| 3  | `PATCH /api/me/password` — change password                  | |
+| #  | Task                                                        | Details | Status |
+| -- | ----------------------------------------------------------- | ------- | ------ |
+| 1  | `GET /api/me` — current user profile                        | | Completed |
+| 2  | `PATCH /api/me` — update name/email                         | | Completed |
+| 3  | `PATCH /api/me/password` — change password                  | | Completed |
 
 ---
 
