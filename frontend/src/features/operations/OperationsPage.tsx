@@ -89,13 +89,35 @@ export default function OperationsPage() {
       ? availableProducts.find((p) => p.sku.toLowerCase() === skuParam.toLowerCase())
       : null;
 
+    const initialTargetLoc =
+      opType === 'receipt'
+        ? 'WH/Stock1'
+        : opType === 'internal'
+        ? 'WH/Production'
+        : opType === 'adjustment'
+        ? 'WH/Stock1'
+        : 'Customer Location';
+
+    const initialSourceLoc =
+      opType === 'receipt'
+        ? 'vendor'
+        : 'WH/Stock1';
+
+    const chosenProd = matched || availableProducts[0];
+    const initialQty = opType === 'adjustment' ? (chosenProd?.totalStock ?? 10) : 6;
+
     setFormFields({
-      receiveFrom: opType === 'internal' ? 'Production Line' : 'Azure Interior',
+      receiveFrom:
+        opType === 'internal'
+          ? 'Production Line'
+          : opType === 'adjustment'
+          ? 'Physical Inventory Count'
+          : 'Azure Interior',
       scheduleDate: new Date().toISOString().substring(0, 10),
       responsible: user?.name || 'Syed Tashfeen',
-      toLocation: opType === 'receipt' ? 'WH/Stock1' : opType === 'internal' ? 'WH/Production' : 'Customer Location',
-      fromLocation: opType === 'receipt' ? 'vendor' : 'WH/Stock1',
-      lines: [{ productId: matched ? matched.id : defaultProdId, quantity: 6 }],
+      toLocation: initialTargetLoc,
+      fromLocation: initialSourceLoc,
+      lines: [{ productId: chosenProd ? chosenProd.id : defaultProdId, quantity: initialQty }],
     });
     setActiveOperation(null);
     setIsEditing(true);
@@ -699,6 +721,41 @@ export default function OperationsPage() {
                       />
                     </div>
                   </>
+                ) : opType === 'adjustment' ? (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Adjustment Location</label>
+                      <select
+                        className={styles.fieldInput}
+                        value={formFields.toLocation}
+                        onChange={(e) =>
+                          setFormFields({
+                            ...formFields,
+                            toLocation: e.target.value,
+                            fromLocation: e.target.value,
+                          })
+                        }
+                        required
+                      >
+                        <option value="WH/Stock1">WH/Stock1 (Primary Storage)</option>
+                        <option value="WH/Stock2">WH/Stock2 (Secondary Storage)</option>
+                        <option value="WH/Rack A">WH/Rack A (Heavy Pallet Racks)</option>
+                        <option value="WH/Production">WH/Production (Assembly Floor)</option>
+                      </select>
+                    </div>
+
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Audit Reason / Reference</label>
+                      <input
+                        type="text"
+                        className={styles.fieldInput}
+                        value={formFields.receiveFrom}
+                        onChange={(e) => setFormFields({ ...formFields, receiveFrom: e.target.value })}
+                        placeholder="e.g. Annual Inventory Count / Damaged Goods Audit"
+                        required
+                      />
+                    </div>
+                  </>
                 ) : (
                   <div className={styles.fieldGroup}>
                     <label className={styles.fieldLabel}>
@@ -769,15 +826,23 @@ export default function OperationsPage() {
                 <table className={styles.table}>
                   <thead>
                     <tr>
-                      <th style={{ width: '60%' }}>Product</th>
-                      <th style={{ width: '30%' }}>Quantity</th>
-                      <th style={{ width: '10%' }}></th>
+                      <th style={{ width: opType === 'adjustment' ? '38%' : '60%' }}>Product</th>
+                      {opType === 'adjustment' && <th style={{ width: '18%', textAlign: 'right' }}>Recorded Stock</th>}
+                      <th style={{ width: opType === 'adjustment' ? '22%' : '30%', textAlign: opType === 'adjustment' ? 'right' : 'left' }}>
+                        {opType === 'adjustment' ? 'Physical Count' : 'Quantity'}
+                      </th>
+                      {opType === 'adjustment' && <th style={{ width: '18%', textAlign: 'right' }}>Difference</th>}
+                      <th style={{ width: opType === 'adjustment' ? '4%' : '10%' }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {formFields.lines.map((line, idx) => {
                       const isOut = checkIsOutOfStock(line.productId, '', Number(line.quantity) || 0);
                       const currentProd = products.find((p) => p.id === line.productId);
+                      const recordedStock = currentProd
+                        ? (currentProd.stockByLocation?.find(s => s.locationName === formFields.toLocation || s.locationId === formFields.toLocation)?.quantity ?? currentProd.totalStock)
+                        : 0;
+                      const diff = Number(line.quantity) - recordedStock;
 
                       return (
                         <tr key={idx} className={isOut ? styles.rowOutOfStock : undefined}>
@@ -789,6 +854,13 @@ export default function OperationsPage() {
                               onChange={(e) => {
                                 const next = [...formFields.lines];
                                 next[idx].productId = e.target.value;
+                                if (opType === 'adjustment') {
+                                  const p = products.find(prod => prod.id === e.target.value);
+                                  const rec = p
+                                    ? (p.stockByLocation?.find(s => s.locationName === formFields.toLocation || s.locationId === formFields.toLocation)?.quantity ?? p.totalStock)
+                                    : 0;
+                                  next[idx].quantity = rec;
+                                }
                                 setFormFields({ ...formFields, lines: next });
                               }}
                               required
@@ -808,21 +880,31 @@ export default function OperationsPage() {
                               </div>
                             )}
                           </td>
+                          {opType === 'adjustment' && (
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: '#475569' }}>
+                              {recordedStock} units
+                            </td>
+                          )}
                           <td>
                             <input
                               type="number"
-                              min="1"
+                              min="0"
                               className={styles.fieldInput}
-                              style={{ width: '100%' }}
+                              style={{ width: '100%', textAlign: opType === 'adjustment' ? 'right' : 'left' }}
                               value={line.quantity}
                               onChange={(e) => {
                                 const next = [...formFields.lines];
-                                next[idx].quantity = Number(e.target.value) || 1;
+                                next[idx].quantity = Number(e.target.value) || 0;
                                 setFormFields({ ...formFields, lines: next });
                               }}
                               required
                             />
                           </td>
+                          {opType === 'adjustment' && (
+                            <td style={{ textAlign: 'right', fontWeight: 700, color: diff === 0 ? '#64748B' : diff > 0 ? '#008784' : '#DC2626' }}>
+                              {diff === 0 ? '0 (Matches)' : diff > 0 ? `+${diff} units` : `${diff} units`}
+                            </td>
+                          )}
                           <td style={{ textAlign: 'center' }}>
                             {formFields.lines.length > 1 && (
                               <button
@@ -908,6 +990,21 @@ export default function OperationsPage() {
                       </div>
                     </div>
                   </>
+                ) : op?.type === 'adjustment' ? (
+                  <>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Adjustment Location</label>
+                      <div className={styles.fieldInput} style={{ background: '#F8FAFC', fontWeight: 600 }}>
+                        {op?.toLocation || op?.fromLocation || 'WH/Stock1'}
+                      </div>
+                    </div>
+                    <div className={styles.fieldGroup}>
+                      <label className={styles.fieldLabel}>Audit Reason / Reference</label>
+                      <div className={styles.fieldInput} style={{ background: '#F8FAFC' }}>
+                        {op?.contact || 'Physical Inventory Count'}
+                      </div>
+                    </div>
+                  </>
                 ) : (
                   <div className={styles.fieldGroup}>
                     <label className={styles.fieldLabel}>
@@ -960,8 +1057,13 @@ export default function OperationsPage() {
                   <thead>
                     <tr>
                       <th>Product</th>
-                      <th style={{ textAlign: 'right' }}>Quantity</th>
-                      <th style={{ textAlign: 'right' }}>Availability</th>
+                      {op?.type === 'adjustment' && <th style={{ textAlign: 'right' }}>Recorded Stock</th>}
+                      <th style={{ textAlign: 'right' }}>
+                        {op?.type === 'adjustment' ? 'Counted Physical Quantity' : 'Quantity'}
+                      </th>
+                      <th style={{ textAlign: 'right' }}>
+                        {op?.type === 'adjustment' ? 'Inventory Status / Variance' : 'Availability'}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -969,6 +1071,7 @@ export default function OperationsPage() {
                       const isOut = checkIsOutOfStock(l.productId, l.sku, l.quantity);
                       const prod = products.find((p) => p.id === l.productId || p.sku === l.sku);
                       const available = prod ? prod.totalStock : 0;
+                      const diff = l.quantity - available;
 
                       return (
                         <tr key={l.id} className={isOut ? styles.rowOutOfStock : undefined}>
@@ -980,10 +1083,23 @@ export default function OperationsPage() {
                               </span>
                             )}
                           </td>
-                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.quantity}</td>
-                          <td style={{ textAlign: 'right', fontWeight: 600, color: isOut ? '#DC2626' : '#15803D' }}>
-                            {op.type === 'receipt'
+                          {op?.type === 'adjustment' && (
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: '#64748B' }}>
+                              {available} units
+                            </td>
+                          )}
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.quantity} units</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: isOut ? '#DC2626' : '#008784' }}>
+                            {op?.type === 'receipt'
                               ? 'Incoming'
+                              : op?.type === 'adjustment'
+                              ? op.status === 'done'
+                                ? `✓ Synced (${l.quantity} units)`
+                                : diff === 0
+                                ? 'Matches Recorded'
+                                : diff > 0
+                                ? `+${diff} units`
+                                : `${diff} units`
                               : isOut
                               ? `${available} in stock (Short: ${l.quantity - available})`
                               : `${available} in stock`}
