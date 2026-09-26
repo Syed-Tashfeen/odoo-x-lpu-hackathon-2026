@@ -29,7 +29,7 @@ export function setupSwagger(app: Express): void {
       title: "StockSense API v1",
       version: "1.0.0",
       description:
-        "Authentication & REST API for QuickCourt. Built with Express, Drizzle ORM & Zod.",
+        "Authentication & REST API for StockSense. Built with Express, Drizzle ORM & Zod.",
     },
     servers: [{ url: "/api/v1" }, { url: "/api" }],
   });
