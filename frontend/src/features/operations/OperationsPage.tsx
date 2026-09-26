@@ -82,6 +82,17 @@ export default function OperationsPage() {
     lines: [{ productId: '', quantity: 1 }],
   });
 
+  const getStockAtLoc = (p: Product | undefined, loc: string) => {
+    if (!p) return 0;
+    if (!p.stockByLocation || !Array.isArray(p.stockByLocation) || p.stockByLocation.length === 0) {
+      return (loc === 'WH/Stock1' || loc === 'loc_wh_stock1') ? p.totalStock : 0;
+    }
+    const match = p.stockByLocation.find(
+      (s) => s.locationName === loc || s.locationId === loc
+    );
+    return match ? match.quantity : 0;
+  };
+
   const startNewOperation = (availableProducts = products) => {
     const defaultProdId = availableProducts[0]?.id || '';
     const skuParam = searchParams.get('sku');
@@ -104,7 +115,7 @@ export default function OperationsPage() {
         : 'WH/Stock1';
 
     const chosenProd = matched || availableProducts[0];
-    const initialQty = opType === 'adjustment' ? (chosenProd?.totalStock ?? 10) : 6;
+    const initialQty = opType === 'adjustment' ? getStockAtLoc(chosenProd, initialTargetLoc) : 6;
 
     setFormFields({
       receiveFrom:
@@ -490,9 +501,11 @@ export default function OperationsPage() {
 
   // Add line to form
   const handleAddLine = () => {
+    const firstProd = products[0];
+    const defaultQty = opType === 'adjustment' ? getStockAtLoc(firstProd, formFields.toLocation) : 1;
     setFormFields({
       ...formFields,
-      lines: [...formFields.lines, { productId: products[0]?.id || '', quantity: 1 }],
+      lines: [...formFields.lines, { productId: firstProd?.id || '', quantity: defaultQty }],
     });
   };
 
@@ -728,13 +741,20 @@ export default function OperationsPage() {
                       <select
                         className={styles.fieldInput}
                         value={formFields.toLocation}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const newLoc = e.target.value;
+                          const updatedLines = formFields.lines.map((l) => {
+                            const p = products.find((prod) => prod.id === l.productId);
+                            const rec = getStockAtLoc(p, newLoc);
+                            return { ...l, quantity: rec };
+                          });
                           setFormFields({
                             ...formFields,
-                            toLocation: e.target.value,
-                            fromLocation: e.target.value,
-                          })
-                        }
+                            toLocation: newLoc,
+                            fromLocation: newLoc,
+                            lines: updatedLines,
+                          });
+                        }}
                         required
                       >
                         <option value="WH/Stock1">WH/Stock1 (Primary Storage)</option>
@@ -839,9 +859,7 @@ export default function OperationsPage() {
                     {formFields.lines.map((line, idx) => {
                       const isOut = checkIsOutOfStock(line.productId, '', Number(line.quantity) || 0);
                       const currentProd = products.find((p) => p.id === line.productId);
-                      const recordedStock = currentProd
-                        ? (currentProd.stockByLocation?.find(s => s.locationName === formFields.toLocation || s.locationId === formFields.toLocation)?.quantity ?? currentProd.totalStock)
-                        : 0;
+                      const recordedStock = getStockAtLoc(currentProd, formFields.toLocation);
                       const diff = Number(line.quantity) - recordedStock;
 
                       return (
@@ -856,9 +874,7 @@ export default function OperationsPage() {
                                 next[idx].productId = e.target.value;
                                 if (opType === 'adjustment') {
                                   const p = products.find(prod => prod.id === e.target.value);
-                                  const rec = p
-                                    ? (p.stockByLocation?.find(s => s.locationName === formFields.toLocation || s.locationId === formFields.toLocation)?.quantity ?? p.totalStock)
-                                    : 0;
+                                  const rec = getStockAtLoc(p, formFields.toLocation);
                                   next[idx].quantity = rec;
                                 }
                                 setFormFields({ ...formFields, lines: next });
@@ -866,11 +882,14 @@ export default function OperationsPage() {
                               required
                             >
                               <option value="">Select product...</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  [{p.sku}] {p.name} ({p.totalStock} in stock)
-                                </option>
-                              ))}
+                              {products.map((p) => {
+                                const stockHere = opType === 'adjustment' ? getStockAtLoc(p, formFields.toLocation) : p.totalStock;
+                                return (
+                                  <option key={p.id} value={p.id}>
+                                    [{p.sku}] {p.name} ({stockHere} {opType === 'adjustment' ? `at ${formFields.toLocation}` : 'in stock'})
+                                  </option>
+                                );
+                              })}
                             </select>
                             {isOut && (
                               <div style={{ marginTop: 4 }}>
@@ -1071,7 +1090,9 @@ export default function OperationsPage() {
                       const isOut = checkIsOutOfStock(l.productId, l.sku, l.quantity);
                       const prod = products.find((p) => p.id === l.productId || p.sku === l.sku);
                       const available = prod ? prod.totalStock : 0;
-                      const diff = l.quantity - available;
+                      const targetLoc = op?.toLocation || op?.fromLocation || 'WH/Stock1';
+                      const locStock = prod ? getStockAtLoc(prod, targetLoc) : 0;
+                      const diff = l.quantity - locStock;
 
                       return (
                         <tr key={l.id} className={isOut ? styles.rowOutOfStock : undefined}>
@@ -1085,7 +1106,7 @@ export default function OperationsPage() {
                           </td>
                           {op?.type === 'adjustment' && (
                             <td style={{ textAlign: 'right', fontWeight: 600, color: '#64748B' }}>
-                              {available} units
+                              {locStock} units
                             </td>
                           )}
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.quantity} units</td>
