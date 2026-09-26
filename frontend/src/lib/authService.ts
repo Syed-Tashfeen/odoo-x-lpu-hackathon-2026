@@ -148,26 +148,28 @@ export interface AuthSuccessResult {
   token: string;
 }
 
+const isTestEnv =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test') ||
+  (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'test');
+
 export const authService = {
   /**
    * Login user with Login Id or Email and password.
    * Throws "Invalid Login Id or Password" on mismatch.
    */
-  async login(loginIdOrEmail: string, password: string):Promise<AuthSuccessResult> {
+  async login(loginIdOrEmail: string, password: string): Promise<AuthSuccessResult> {
     const trimmedId = loginIdOrEmail.trim().toLowerCase();
 
-    // Try backend API first if running in browser non-test mode
-    const isTest =
-      (typeof import.meta !== 'undefined' && (import.meta as any).env?.MODE === 'test') ||
-      (typeof globalThis !== 'undefined' && (globalThis as any).process?.env?.NODE_ENV === 'test');
-    if (!isTest) {
+    // In live browser mode, try backend API first
+    if (!isTestEnv) {
       try {
         const response = await api.post('/auth/login', {
           email: trimmedId,
           password,
         });
         if (response.data?.data) {
-          const { user, accessToken } = response.data.data;
+          const { user, token, accessToken } = response.data.data;
+          const actualToken = token || accessToken;
           return {
             user: {
               id: user.id,
@@ -178,18 +180,17 @@ export const authService = {
               emailVerified: user.emailVerified ?? true,
               createdAt: user.createdAt,
             },
-            token: accessToken,
+            token: actualToken,
           };
         }
       } catch (err: any) {
-        // If server explicitly returned 401, handle via database
-        if (err.response?.status === 401) {
-          throw new Error('Invalid Login Id or Password');
+        if (err.response?.status === 401 || err.response?.status === 400) {
+          throw new Error(err.response?.data?.message || 'Invalid Login Id or Password');
         }
       }
     }
 
-    // Check client-side persistent user database
+    // Check client-side persistent user database (test mode or fallback)
     const users = getUsersFromDb();
     const matchedUser = users.find((u) => {
       const emailMatch = u.email.toLowerCase() === trimmedId;
@@ -257,15 +258,18 @@ export const authService = {
     users.push(newUser);
     saveUsersToDb(users);
 
-    // Also attempt backend registration if backend is reachable
-    try {
-      await api.post('/auth/register', {
-        email: trimmedEmail,
-        password: data.password,
-        name: newUser.name,
-      });
-    } catch {
-      // Local database is source of truth during offline/standalone demo
+    // Also attempt backend registration if in browser
+    if (!isTestEnv) {
+      try {
+        await api.post('/auth/signup', {
+          email: trimmedEmail,
+          password: data.password,
+          name: newUser.name,
+          role: 'staff',
+        });
+      } catch {
+        // Fallback silently if offline
+      }
     }
 
     const authUser: AuthUser = {
@@ -284,11 +288,33 @@ export const authService = {
 
   /**
    * Request password reset.
-   * Generates a 6-digit OTP stored in database with 10 minutes expiry.
+   * Calls real backend API (/auth/forgot-password) when available,
+   * falling back to local persistent database.
    */
   async requestPasswordReset(identifier: string): Promise<{ otp: string; message: string }> {
-    const users = getUsersFromDb();
     const trimmed = identifier.trim().toLowerCase();
+
+    // 1. Try real backend API if in live browser mode
+    if (!isTestEnv) {
+      try {
+        const response = await api.post('/auth/forgot-password', {
+          email: trimmed,
+        });
+        if (response.data) {
+          return {
+            otp: response.data.devOtp || '',
+            message: response.data.message || 'If an account with that email exists, an OTP has been sent.',
+          };
+        }
+      } catch (err: any) {
+        if (err.response?.data?.message) {
+          throw new Error(err.response.data.message);
+        }
+      }
+    }
+
+    // 2. Client-side database fallback
+    const users = getUsersFromDb();
     const user = users.find(
       (u) => u.email.toLowerCase() === trimmed || u.loginId.toLowerCase() === trimmed
     );
@@ -313,10 +339,30 @@ export const authService = {
 
   /**
    * Verify OTP and reset password.
+   * Calls real backend API (/auth/reset-password) when available,
+   * falling back to local persistent database.
    */
   async resetPassword(data: ResetPasswordFormData): Promise<void> {
-    const users = getUsersFromDb();
     const trimmed = data.identifier.trim().toLowerCase();
+
+    // 1. Try real backend API if in live browser mode
+    if (!isTestEnv) {
+      try {
+        await api.post('/auth/reset-password', {
+          email: trimmed,
+          otp: data.otp.trim(),
+          newPassword: data.newPassword,
+        });
+        return;
+      } catch (err: any) {
+        if (err.response?.data?.message) {
+          throw new Error(err.response.data.message);
+        }
+      }
+    }
+
+    // 2. Client-side database fallback
+    const users = getUsersFromDb();
     const userIndex = users.findIndex(
       (u) => u.email.toLowerCase() === trimmed || u.loginId.toLowerCase() === trimmed
     );

@@ -10,6 +10,8 @@ export default function ForgotPasswordPage() {
   const [identifier, setIdentifier] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -25,8 +27,10 @@ export default function ForgotPasswordPage() {
     setIsLoading(true);
     try {
       const response = await authService.requestPasswordReset(identifier);
-      setGeneratedOtp(response.otp);
-      toast.success('Verification code generated!');
+      setGeneratedOtp(response.otp || null);
+      setSuccessMessage(response.message || 'If an account with that email exists, an OTP has been sent.');
+      setIsSubmitted(true);
+      toast.success('Verification request processed!');
     } catch (err: any) {
       const msg = err.message || 'Failed to process request';
       setError(msg);
@@ -65,17 +69,32 @@ export default function ForgotPasswordPage() {
           </div>
         )}
 
-        {generatedOtp ? (
+        {isSubmitted ? (
           <div className={styles.successBox}>
-            <p><strong>Verification Code Generated:</strong></p>
-            <div className={styles.otpDisplay}>{generatedOtp}</div>
-            <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
-              This code will expire in 10 minutes.
-            </p>
+            {generatedOtp ? (
+              <>
+                <p><strong>Verification Code Generated:</strong></p>
+                <div className={styles.otpDisplay}>{generatedOtp}</div>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                  This code has also been sent to your email and expires in 10 minutes.
+                </p>
+              </>
+            ) : (
+              <>
+                <p><strong>Check Your Email:</strong></p>
+                <p style={{ fontSize: '14px', color: '#334155', margin: '12px 0' }}>
+                  {successMessage}
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                  Please check your inbox (and spam folder) for the 6-digit verification code.
+                </p>
+              </>
+            )}
             <button
               type="button"
               className={styles.submitBtn}
               onClick={handleProceedToReset}
+              style={{ marginTop: '16px' }}
             >
               Continue to Reset Password →
             </button>
