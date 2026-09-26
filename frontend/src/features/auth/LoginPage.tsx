@@ -57,12 +57,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickFillAdmin = () => {
-    setLoginId('admin@stocksense.com');
-    setPassword('admin123');
-    setErrorMessage(null);
-    setFieldErrors({});
-  };
 
   return (
     <div className={styles.container}>
@@ -163,22 +157,6 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        {/* Default Admin Credentials Helper */}
-        <div className={styles.demoBox}>
-          <div className={styles.demoBoxHeader}>
-            <span className={styles.demoBoxTitle}>Default Credentials</span>
-            <button
-              type="button"
-              className={styles.quickFillBtn}
-              onClick={handleQuickFillAdmin}
-            >
-              Fill Admin Creds
-            </button>
-          </div>
-          <div className={styles.demoCredsText}>
-            User: <strong>admin@stocksense.com</strong> | Pass: <strong>admin123</strong>
-          </div>
-        </div>
       </div>
     </div>
   );

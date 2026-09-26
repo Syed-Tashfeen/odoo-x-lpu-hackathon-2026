@@ -115,7 +115,7 @@ const router = createBrowserRouter([
   {
     path: '*',
     element: (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16, fontFamily: 'Inter, sans-serif', backgroundColor: '#F8FAFC' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16, fontFamily: "var(--font-sans, 'Geist', sans-serif)", backgroundColor: '#F8FAFC' }}>
         <div style={{ fontSize: 64, fontWeight: 800, color: '#714B67' }}>404</div>
         <div style={{ fontSize: 18, color: '#64748B' }}>Page not found</div>
         <a href="/dashboard" style={{ color: '#714B67', fontWeight: 600 }}>← Back to Dashboard</a>
