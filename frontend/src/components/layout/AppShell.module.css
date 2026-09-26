@@ -1,0 +1,24 @@
+/* ============================================================
+   AppShell — Full-width layout with TopBar
+   ============================================================ */
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--color-bg);
+}
+
+.main {
+  flex: 1;
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+@media (max-width: 767px) {
+  .main {
+    padding: var(--space-4);
+  }
+}

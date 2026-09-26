@@ -1,7 +1,184 @@
-.card { width: 100%; max-width: 440px; }
-.header { text-align: center; margin-bottom: var(--space-6); }
-.title { font-size: var(--text-2xl); font-weight: 700; color: var(--color-text); margin-bottom: var(--space-1); }
-.subtitle { font-size: var(--text-sm); color: var(--color-text-muted); }
-.form { display: flex; flex-direction: column; gap: var(--space-4); }
-.footer { text-align: center; font-size: var(--text-sm); color: var(--color-text-muted); margin-top: var(--space-4); }
-.link { color: var(--color-primary); font-weight: 600; }
+/* ============================================================
+   StockSense — Register / Sign Up Page (Odoo Theme, Flat Solid)
+   ============================================================ */
+
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  background-color: var(--color-bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 480px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-8);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ---- App Logo Header ---- */
+.logoWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: var(--space-6);
+}
+
+.logoBadge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background-color: #714B67;
+  color: #FFFFFF;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  margin-bottom: var(--space-3);
+}
+
+.brandName {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.brandTagline {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: var(--font-semi);
+}
+
+.formTitle {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  margin-top: var(--space-4);
+  text-align: center;
+}
+
+/* ---- Error Banner ---- */
+.errorBanner {
+  background-color: var(--color-error-light);
+  border: 1px solid var(--color-error);
+  color: var(--color-error);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- Form ---- */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.togglePassBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  transition: color var(--transition-fast);
+}
+
+.togglePassBtn:hover {
+  color: var(--color-text);
+}
+
+/* ---- Password Checklist Rules ---- */
+.rulesBox {
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.rulesTitle {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semi);
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+
+.ruleItem {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.ruleItem.valid {
+  color: var(--color-success);
+}
+
+.submitBtn {
+  background-color: #714B67;
+  color: #FFFFFF;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semi);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  height: 44px;
+  border-radius: var(--radius-xs);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  margin-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.submitBtn:hover:not(:disabled) {
+  background-color: #5B3C53;
+}
+
+.submitBtn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* ---- Footer Link ---- */
+.footer {
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: var(--space-5);
+}
+
+.link {
+  color: #714B67;
+  font-weight: var(--font-semi);
+  text-decoration: none;
+  margin-left: var(--space-1);
+  transition: color var(--transition-fast);
+}
+
+.link:hover {
+  color: #5B3C53;
+  text-decoration: underline;
+}

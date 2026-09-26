@@ -1,18 +1,17 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Input } from '../../components/ui/Input';
-import { useAuthStore } from '../../stores/authStore';
-import { authService, registerZodSchema } from '../../lib/authService';
-import styles from './RegisterPage.module.css';
+import { authService, resetPasswordZodSchema } from '../../lib/authService';
+import styles from './ResetPasswordPage.module.css';
 
-export default function RegisterPage() {
+export default function ResetPasswordPage() {
   const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const [searchParams] = useSearchParams();
 
-  const [loginId, setLoginId] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [identifier, setIdentifier] = useState(searchParams.get('identifier') || '');
+  const [otp, setOtp] = useState(searchParams.get('otp') || '');
+  const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   const [showPassword, setShowPassword] = useState(false);
@@ -23,21 +22,20 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
 
   // Live password validation checklist
-  const hasMinLength = password.length > 8;
-  const hasLowerCase = /[a-z]/.test(password);
-  const hasUpperCase = /[A-Z]/.test(password);
-  const hasSpecialChar = /[^a-zA-Z0-9]/.test(password);
+  const hasMinLength = newPassword.length > 8;
+  const hasLowerCase = /[a-z]/.test(newPassword);
+  const hasUpperCase = /[A-Z]/.test(newPassword);
+  const hasSpecialChar = /[^a-zA-Z0-9]/.test(newPassword);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setFieldErrors({});
 
-    // 1. Zod client-side validation
-    const result = registerZodSchema.safeParse({
-      loginId,
-      email,
-      password,
+    const result = resetPasswordZodSchema.safeParse({
+      identifier,
+      otp,
+      newPassword,
       confirmPassword,
     });
 
@@ -55,20 +53,17 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
-      // 2. Register user into database with uniqueness checks
-      const authResult = await authService.register({
-        loginId,
-        email,
-        password,
+      await authService.resetPassword({
+        identifier,
+        otp,
+        newPassword,
         confirmPassword,
       });
 
-      // Auto sign-in new user
-      setAuth(authResult.user, authResult.token);
-      toast.success('Account created successfully! Welcome to StockSense.');
-      navigate('/dashboard', { replace: true });
+      toast.success('Password updated successfully! Please sign in with your new password.');
+      navigate('/login', { replace: true });
     } catch (err: any) {
-      const msg = err.message || 'Registration failed';
+      const msg = err.message || 'Failed to reset password';
       setErrorMessage(msg);
       toast.error(msg);
     } finally {
@@ -84,10 +79,9 @@ export default function RegisterPage() {
           <div className={styles.logoBadge}>S</div>
           <h1 className={styles.brandName}>StockSense</h1>
           <p className={styles.brandTagline}>Inventory Management System</p>
-          <h2 className={styles.formTitle}>Sign Up</h2>
+          <h2 className={styles.formTitle}>Reset Password</h2>
         </div>
 
-        {/* Global error banner */}
         {errorMessage && (
           <div className={styles.errorBanner} role="alert">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -99,54 +93,46 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {/* Sign up form */}
         <form onSubmit={handleSubmit} className={styles.form} noValidate>
-          {/* 1. Enter Login Id */}
           <Input
-            label="Enter Login Id"
+            label="Login Id or Email Id"
             type="text"
-            placeholder="e.g. jsmith (6-12 chars)"
-            value={loginId}
+            placeholder="e.g. admin or user@stocksense.com"
+            value={identifier}
             onChange={(e) => {
-              setLoginId(e.target.value);
-              if (fieldErrors.loginId) setFieldErrors((prev) => ({ ...prev, loginId: '' }));
+              setIdentifier(e.target.value);
+              if (fieldErrors.identifier) setFieldErrors((prev) => ({ ...prev, identifier: '' }));
               if (errorMessage) setErrorMessage(null);
             }}
-            error={fieldErrors.loginId}
-            helperText="Must be unique, 6-12 alphanumeric characters"
-            autoComplete="username"
-            autoFocus
+            error={fieldErrors.identifier}
           />
 
-          {/* 2. Enter Email Id */}
           <Input
-            label="Enter Email Id"
-            type="email"
-            placeholder="e.g. user@stocksense.com"
-            value={email}
+            label="6-Digit Verification Code"
+            type="text"
+            maxLength={6}
+            placeholder="123456"
+            value={otp}
             onChange={(e) => {
-              setEmail(e.target.value);
-              if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: '' }));
+              setOtp(e.target.value.replace(/\D/g, ''));
+              if (fieldErrors.otp) setFieldErrors((prev) => ({ ...prev, otp: '' }));
               if (errorMessage) setErrorMessage(null);
             }}
-            error={fieldErrors.email}
-            helperText="Must be unique in database"
-            autoComplete="email"
+            error={fieldErrors.otp}
+            helperText="Enter the 6-digit OTP code received"
           />
 
-          {/* 3. Enter Password */}
           <Input
-            label="Enter Password"
+            label="New Password"
             type={showPassword ? 'text' : 'password'}
-            placeholder="Enter a strong password"
-            value={password}
+            placeholder="Enter new password"
+            value={newPassword}
             onChange={(e) => {
-              setPassword(e.target.value);
-              if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: '' }));
+              setNewPassword(e.target.value);
+              if (fieldErrors.newPassword) setFieldErrors((prev) => ({ ...prev, newPassword: '' }));
               if (errorMessage) setErrorMessage(null);
             }}
-            error={fieldErrors.password}
-            autoComplete="new-password"
+            error={fieldErrors.newPassword}
             rightIcon={
               <button
                 type="button"
@@ -170,12 +156,11 @@ export default function RegisterPage() {
             }
           />
 
-          {/* Password Requirements Checklist */}
-          {password.length > 0 && (
+          {newPassword.length > 0 && (
             <div className={styles.rulesBox}>
               <span className={styles.rulesTitle}>Password Criteria:</span>
               <span className={`${styles.ruleItem} ${hasMinLength ? styles.valid : ''}`}>
-                {hasMinLength ? '✓' : '○'} More than 8 characters ({password.length}/9+)
+                {hasMinLength ? '✓' : '○'} More than 8 characters ({newPassword.length}/9+)
               </span>
               <span className={`${styles.ruleItem} ${hasLowerCase ? styles.valid : ''}`}>
                 {hasLowerCase ? '✓' : '○'} At least one lowercase letter
@@ -189,11 +174,10 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* 4. Re-Enter Password */}
           <Input
-            label="Re-Enter Password"
+            label="Re-Enter New Password"
             type={showConfirmPassword ? 'text' : 'password'}
-            placeholder="Re-enter your password"
+            placeholder="Confirm new password"
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value);
@@ -201,7 +185,6 @@ export default function RegisterPage() {
               if (errorMessage) setErrorMessage(null);
             }}
             error={fieldErrors.confirmPassword}
-            autoComplete="new-password"
             rightIcon={
               <button
                 type="button"
@@ -230,13 +213,12 @@ export default function RegisterPage() {
             className={styles.submitBtn}
             disabled={isLoading}
           >
-            {isLoading ? 'Creating Account...' : 'SIGN UP'}
+            {isLoading ? 'Updating Password...' : 'RESET PASSWORD'}
           </button>
         </form>
 
-        {/* Footer Link */}
         <div className={styles.footer}>
-          Already have an account?
+          Return to
           <Link to="/login" className={styles.link}>
             Sign In
           </Link>

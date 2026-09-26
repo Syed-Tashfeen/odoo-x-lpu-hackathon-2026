@@ -14,8 +14,8 @@ export default function LandingPage() {
       <header className={styles.navbar}>
         <div className={styles.navContainer}>
           <Link to="/" className={styles.logo}>
-            <span className={styles.logoIcon}>⚡</span>
-            <span className={styles.logoText}>HackTemplate</span>
+            <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: '#714B67', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16 }}>S</div>
+            <span className={styles.logoText}>StockSense</span>
           </Link>
 
           <nav className={styles.navLinks}>
@@ -27,6 +27,9 @@ export default function LandingPage() {
             {isAuthenticated ? (
               <div className={styles.userProfile}>
                 <span className={styles.userName}>Hi, {user?.name || 'User'}</span>
+                <Link to="/dashboard" className={styles.primaryButton}>
+                  Go to Dashboard
+                </Link>
                 <button
                   id="logout-btn"
                   onClick={logout}
@@ -55,25 +58,25 @@ export default function LandingPage() {
           <div className={styles.badgeWrapper}>
             <span className={styles.heroBadge}>
               <span className={styles.badgePulse}></span>
-              Hackathon Ready Template 🚀
+              Enterprise Inventory Management
             </span>
           </div>
 
           <h1 className={styles.heroTitle}>
-            Build and Ship Your Next Big Idea <span className={styles.gradientText}>in Record Time</span>
+            Modern Inventory Control <span className={styles.gradientText}>Built for Scale</span>
           </h1>
 
           <p className={styles.heroDescription}>
-            A production-ready React + TypeScript template with built-in authentication, clean routing, modern UI design system, state management, and API clients.
+            StockSense streamlines your supply chain: double-entry stock tracking, automated reordering, internal warehouse transfers, and real-time ledger auditing.
           </p>
 
           <div className={styles.ctaGroup}>
             <button
               id="hero-get-started-btn"
-              onClick={() => navigate(isAuthenticated ? '/' : '/login')}
+              onClick={() => navigate(isAuthenticated ? '/dashboard' : '/login')}
               className={styles.heroPrimaryCta}
             >
-              <span>Launch App</span>
+              <span>{isAuthenticated ? 'Open Dashboard' : 'Launch App'}</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path d="M5 12h14M12 5l7 7-7 7" />
               </svg>
@@ -225,10 +228,10 @@ export default function LandingPage() {
       <footer className={styles.footer}>
         <div className={styles.footerContainer}>
           <div className={styles.footerBrand}>
-            <span className={styles.logoIcon}>⚡</span>
-            <span>HackTemplate • Built for Speed & Flexibility</span>
+            <div style={{ width: 22, height: 22, borderRadius: 4, backgroundColor: '#714B67', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, marginRight: 8 }}>S</div>
+            <span>StockSense • Modern Inventory Management System</span>
           </div>
-          <p className={styles.footerCopy}>© {new Date().getFullYear()} All rights reserved.</p>
+          <p className={styles.footerCopy}>© {new Date().getFullYear()} StockSense. All rights reserved.</p>
         </div>
       </footer>
     </div>

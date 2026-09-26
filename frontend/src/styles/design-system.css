@@ -5,12 +5,13 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
-/* ---- Color Tokens ----------------------------------------- */
+/* ---- Color Tokens  (Odoo Plum — flat, no gradients) ------- */
 :root {
-  --color-primary:        #047857;
-  --color-primary-hover:  #065f46;
-  --color-primary-light:  rgba(4, 120, 87, 0.10);
-  --color-primary-soft:   rgba(4, 120, 87, 0.05);
+  --color-primary:        #714B67;
+  --color-primary-hover:  #5B3C53;
+  --color-primary-light:  rgba(113, 75, 103, 0.10);
+  --color-primary-soft:   rgba(113, 75, 103, 0.05);
+  --color-primary-dark:   #4A2F42;
 
   --color-bg:             #F8FAFC;
   --color-bg-alt:         #FFFFFF;
@@ -23,6 +24,7 @@
   --color-text:           #0F172A;
   --color-text-muted:     #64748B;
   --color-text-subtle:    #94A3B8;
+  --color-text-on-primary:#FFFFFF;
 
   --color-error:          #EF4444;
   --color-error-light:    rgba(239, 68, 68, 0.08);
@@ -32,6 +34,18 @@
   --color-success-light:  rgba(16, 185, 129, 0.08);
   --color-info:           #0EA5E9;
   --color-info-light:     rgba(14, 165, 233, 0.08);
+
+  /* Status badge palette */
+  --color-draft-bg:       #F1F5F9;
+  --color-draft-text:     #475569;
+  --color-waiting-bg:     #FEF3C7;
+  --color-waiting-text:   #D97706;
+  --color-ready-bg:       #D1FAE5;
+  --color-ready-text:     #059669;
+  --color-done-bg:        #047857;
+  --color-done-text:      #FFFFFF;
+  --color-cancelled-bg:   #FEE2E2;
+  --color-cancelled-text: #DC2626;
 }
 
 /* ---- Typography ------------------------------------------- */
