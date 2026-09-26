@@ -326,16 +326,15 @@ export default function OperationsPage() {
         return;
       }
 
-      // Mark as Ready
-      const readyOp = await operationsService.markAsReady(created.id);
+      // Step 2: Mark as Ready
       setStateModalStep('ready');
       setStateModalStatusBadge('ready');
       setActionLoadingText('3. Mutating Stock Ledger...');
 
       // Step 3: Atomic Stock Mutation & Validation
-      await sleep(550); // Visual step cadence
+      await sleep(450); // Visual step cadence
       setStateModalStep('mutating');
-      const validated = await operationsService.validateOperation(readyOp.id);
+      const validated = await operationsService.validateOperation(created.id);
 
       // Step 4: Finalize
       await sleep(450); // Visual step cadence

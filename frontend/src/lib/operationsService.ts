@@ -1,5 +1,5 @@
 import api from './axios';
-import { productsService } from './productsService';
+import { productsService, getStoredProducts } from './productsService';
 
 export type OperationType = 'receipt' | 'delivery' | 'internal' | 'adjustment';
 export type OperationStatus = 'draft' | 'waiting' | 'ready' | 'done' | 'cancelled';
@@ -410,10 +410,10 @@ export const operationsService = {
     lines: Array<{ productId: string; quantity: number }>;
   }): Promise<Operation> {
     const list = getStoredOperations();
-    const products = await productsService.getProducts();
+    const storedProducts = getStoredProducts();
 
     const fullLines: OperationLine[] = data.lines.map((item, idx) => {
-      const matched = products.items.find((p) => p.id === item.productId || p.sku === item.productId);
+      const matched = storedProducts.find((p) => p.id === item.productId || p.sku === item.productId);
       return {
         id: `line_${Date.now()}_${idx}`,
         productId: matched ? matched.id : item.productId,
@@ -441,7 +441,7 @@ export const operationsService = {
     };
 
     list.unshift(newOp);
-    saveStoredOperations(list);
+    saveStoredOperations(list, true);
 
     try {
       const res = await api.post('/operations', {
@@ -490,7 +490,7 @@ export const operationsService = {
     if (index !== -1) {
       list[index].status = 'ready';
       list[index].updatedAt = new Date().toISOString();
-      saveStoredOperations(list);
+      saveStoredOperations(list, true);
     }
 
     try {
@@ -519,7 +519,7 @@ export const operationsService = {
     if (index !== -1) {
       list[index].status = 'waiting';
       list[index].updatedAt = new Date().toISOString();
-      saveStoredOperations(list);
+      saveStoredOperations(list, true);
     }
 
     try {
@@ -540,14 +540,13 @@ export const operationsService = {
   },
 
   /**
-   * Transition Ready -> Done (Wireframe: "onclick, Validate move to Done")
-   * This automatically mutates the actual stock for the involved products!
+   * Transition Ready -> Done (Atomic PostgreSQL validation)
+   * The backend executes atomic ledger mutations and stock level updates in PostgreSQL.
    */
   async validateOperation(id: string): Promise<Operation> {
     const list = getStoredOperations();
     let index = list.findIndex((o) => o.id === id);
     if (index === -1) {
-      // Try to fetch from server first if not found locally
       const fetched = await this.getOperationById(id);
       if (!fetched) throw new Error('Operation not found');
       index = list.findIndex((o) => o.id === id);
@@ -555,134 +554,15 @@ export const operationsService = {
 
     const op = list[index];
 
-    // If lines are empty locally, attempt to fetch lines from server
-    if (!op.lines || op.lines.length === 0) {
-      try {
-        const fetched = await api.get(`/operations/${id}`);
-        if (fetched.data?.data?.lines && fetched.data.data.lines.length > 0) {
-          op.lines = fetched.data.data.lines.map((l: any) => ({
-            id: l.id,
-            productId: l.productId,
-            productName: l.productName || l.product?.name || 'Product',
-            sku: l.sku || l.product?.sku || 'SKU',
-            quantity: l.quantity,
-            quantityDone: l.quantityDone || 0,
-          }));
-        }
-      } catch {
-        // Fallback
-      }
-    }
-
+    // Optimistically mark lines completed locally
     op.status = 'done';
     op.completedDate = new Date().toISOString().substring(0, 10);
     op.updatedAt = new Date().toISOString();
-
-    // Mark lines as completed
-    op.lines = op.lines.map((l) => ({ ...l, quantityDone: l.quantity }));
-
-    // Mutate product stock levels
-    const allProducts = await productsService.getProducts();
-
-    for (const line of op.lines) {
-      const prod = allProducts.items.find(
-        (p) => p.id === line.productId || (line.sku && p.sku.toLowerCase() === line.sku.toLowerCase())
-      );
-
-      if (prod) {
-        if (!Array.isArray(prod.stockByLocation)) {
-          prod.stockByLocation = [];
-        }
-
-        if (op.type === 'receipt') {
-          // Inbound goods: increase warehouse stock
-          const destLocName = op.toLocation || 'WH/Stock1';
-          let loc = prod.stockByLocation.find(
-            (s) => s.locationName === destLocName || s.locationId === destLocName
-          );
-          if (!loc) {
-            loc = { locationId: `loc_${Date.now()}`, locationName: destLocName, quantity: 0 };
-            prod.stockByLocation.push(loc);
-          }
-          loc.quantity += line.quantity;
-          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
-
-          await productsService.updateProduct(prod.id, {
-            totalStock: newTotal,
-            stockByLocation: [...prod.stockByLocation],
-          });
-        } else if (op.type === 'delivery') {
-          // Outbound goods: decrease warehouse stock
-          const sourceLocName = op.fromLocation || 'WH/Stock1';
-          let loc = prod.stockByLocation.find(
-            (s) => s.locationName === sourceLocName || s.locationId === sourceLocName
-          ) || prod.stockByLocation[0];
-
-          if (loc) {
-            loc.quantity = Math.max(0, loc.quantity - line.quantity);
-          }
-          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
-
-          await productsService.updateProduct(prod.id, {
-            totalStock: newTotal,
-            stockByLocation: [...prod.stockByLocation],
-          });
-        } else if (op.type === 'internal') {
-          // Internal transfer: move stock between locations inside the company
-          const fromLocName = op.fromLocation || 'WH/Stock1';
-          const toLocName = op.toLocation || 'WH/Stock2';
-
-          if (fromLocName !== toLocName) {
-            let fromLoc = prod.stockByLocation.find(
-              (s) => s.locationName === fromLocName || s.locationId === fromLocName
-            ) || prod.stockByLocation[0];
-
-            let toLoc = prod.stockByLocation.find(
-              (s) => s.locationName === toLocName || s.locationId === toLocName
-            );
-
-            if (!toLoc) {
-              toLoc = { locationId: `loc_${Date.now()}`, locationName: toLocName, quantity: 0 };
-              prod.stockByLocation.push(toLoc);
-            }
-
-            if (fromLoc && fromLoc !== toLoc) {
-              fromLoc.quantity = Math.max(0, fromLoc.quantity - line.quantity);
-              toLoc.quantity += line.quantity;
-            }
-
-            const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
-
-            await productsService.updateProduct(prod.id, {
-              totalStock: newTotal,
-              stockByLocation: [...prod.stockByLocation],
-            });
-          }
-        } else if (op.type === 'adjustment') {
-          // Physical inventory adjustment: line.quantity is counted quantity
-          const targetLocName = op.toLocation || op.fromLocation || 'WH/Stock1';
-          let loc = prod.stockByLocation.find(
-            (s) => s.locationName === targetLocName || s.locationId === targetLocName
-          );
-
-          if (!loc) {
-            loc = { locationId: `loc_${Date.now()}`, locationName: targetLocName, quantity: 0 };
-            prod.stockByLocation.push(loc);
-          }
-          loc.quantity = line.quantity;
-          const newTotal = prod.stockByLocation.reduce((sum, s) => sum + s.quantity, 0);
-
-          await productsService.updateProduct(prod.id, {
-            totalStock: newTotal,
-            stockByLocation: [...prod.stockByLocation],
-          });
-        }
-      }
+    if (Array.isArray(op.lines)) {
+      op.lines = op.lines.map((l) => ({ ...l, quantityDone: l.quantity }));
     }
 
-    saveStoredOperations(list);
-
-    // Sync with backend API
+    // Call atomic backend validation API
     try {
       const res = await api.post(`/operations/${id}/validate`);
       if (res.data?.data) {
@@ -690,14 +570,15 @@ export const operationsService = {
         if (res.data.data.completedDate) {
           op.completedDate = res.data.data.completedDate.substring(0, 10);
         }
-        saveStoredOperations(list, true);
       }
-      // Re-fetch products from server to ensure database sync (silent – no event loop)
-      await productsService.getProducts();
-    } catch {
+    } catch (err: any) {
+      if (err.response?.data?.message) {
+        throw new Error(err.response.data.message);
+      }
       // Offline fallback
     }
 
+    saveStoredOperations(list, true);
     return op;
   },
 

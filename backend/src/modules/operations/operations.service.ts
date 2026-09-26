@@ -185,10 +185,13 @@ export async function createOperation(
       }
     }
   } else if (data.type === "adjustment") {
-    if (!destLocId && !sourceLocId) {
-      destLocId = await resolveLocationId(null, "internal");
-    }
+    destLocId = await resolveLocationId(destLocId || sourceLocId, "internal");
+    sourceLocId = null;
   }
+
+  // Ensure empty strings become null for UUID foreign keys
+  sourceLocId = sourceLocId && sourceLocId.trim().length > 0 ? sourceLocId : null;
+  destLocId = destLocId && destLocId.trim().length > 0 ? destLocId : null;
 
   // Generate unique reference (e.g. REC-000001, DEL-000001)
   const reference = await generateReference(data.type);
